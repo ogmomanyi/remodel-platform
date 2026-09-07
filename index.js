@@ -3,88 +3,120 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.run = run;
-function _traverse() {
-  const data = require("@babel/traverse");
-  _traverse = function () {
-    return data;
-  };
-  return data;
-}
-var _pluginPass = require("./plugin-pass.js");
-var _blockHoistPlugin = require("./block-hoist-plugin.js");
-var _normalizeOpts = require("./normalize-opts.js");
-var _normalizeFile = require("./normalize-file.js");
-var _generate = require("./file/generate.js");
-var _deepArray = require("../config/helpers/deep-array.js");
-var _async = require("../gensync-utils/async.js");
-function* run(config, code, ast) {
-  const file = yield* (0, _normalizeFile.default)(config.passes, (0, _normalizeOpts.default)(config), code, ast);
-  const opts = file.opts;
+exports.default = void 0;
+exports.get = get;
+exports.getDependencies = getDependencies;
+exports.isInternal = isInternal;
+exports.list = void 0;
+exports.minVersion = minVersion;
+var _t = require("@babel/types");
+var _helpersGenerated = require("./helpers-generated.js");
+const {
+  cloneNode,
+  identifier
+} = _t;
+function deep(obj, path, value) {
   try {
-    yield* transformFile(file, config.passes);
-  } catch (e) {
-    var _opts$filename;
-    e.message = `${(_opts$filename = opts.filename) != null ? _opts$filename : "unknown file"}: ${e.message}`;
-    if (!e.code) {
-      e.code = "BABEL_TRANSFORM_ERROR";
+    const parts = path.split(".");
+    let last = parts.shift();
+    while (parts.length > 0) {
+      obj = obj[last];
+      last = parts.shift();
     }
-    throw e;
-  }
-  let outputCode, outputMap;
-  try {
-    if (opts.code !== false) {
-      ({
-        outputCode,
-        outputMap
-      } = (0, _generate.default)(config.passes, file));
+    if (arguments.length > 2) {
+      obj[last] = value;
+    } else {
+      return obj[last];
     }
   } catch (e) {
-    var _opts$filename2;
-    e.message = `${(_opts$filename2 = opts.filename) != null ? _opts$filename2 : "unknown file"}: ${e.message}`;
-    if (!e.code) {
-      e.code = "BABEL_GENERATE_ERROR";
-    }
+    e.message += ` (when accessing ${path})`;
     throw e;
   }
-  return {
-    metadata: file.metadata,
-    options: opts,
-    ast: opts.ast === true ? file.ast : null,
-    code: outputCode === undefined ? null : outputCode,
-    map: outputMap === undefined ? null : outputMap,
-    sourceType: file.ast.program.sourceType,
-    externalDependencies: (0, _deepArray.flattenToSet)(config.externalDependencies)
-  };
 }
-function* transformFile(file, pluginPasses) {
-  const async = yield* (0, _async.isAsync)();
-  for (const pluginPairs of pluginPasses) {
-    const passPairs = [];
-    const passes = [];
-    const visitors = [];
-    for (const plugin of pluginPairs.concat([(0, _blockHoistPlugin.default)()])) {
-      const pass = new _pluginPass.default(file, plugin.key, plugin.options, async);
-      passPairs.push([plugin, pass]);
-      passes.push(pass);
-      visitors.push(plugin.visitor);
+function permuteHelperAST(ast, metadata, bindingName, localBindings, getDependency, adjustAst) {
+  const {
+    locals,
+    dependencies,
+    exportBindingAssignments,
+    exportName
+  } = metadata;
+  const bindings = new Set(localBindings || []);
+  if (bindingName) bindings.add(bindingName);
+  for (const [name, paths] of (Object.entries || (o => Object.keys(o).map(k => [k, o[k]])))(locals)) {
+    let newName = name;
+    if (bindingName && name === exportName) {
+      newName = bindingName;
+    } else {
+      while (bindings.has(newName)) newName = "_" + newName;
     }
-    for (const [plugin, pass] of passPairs) {
-      if (plugin.pre) {
-        const fn = (0, _async.maybeAsync)(plugin.pre, `You appear to be using an async plugin/preset, but Babel has been called synchronously`);
-        yield* fn.call(pass, file);
-      }
-    }
-    const visitor = _traverse().default.visitors.merge(visitors, passes, file.opts.wrapPluginVisitorMethod);
-    (0, _traverse().default)(file.ast, visitor, file.scope);
-    for (const [plugin, pass] of passPairs) {
-      if (plugin.post) {
-        const fn = (0, _async.maybeAsync)(plugin.post, `You appear to be using an async plugin/preset, but Babel has been called synchronously`);
-        yield* fn.call(pass, file);
+    if (newName !== name) {
+      for (const path of paths) {
+        deep(ast, path, identifier(newName));
       }
     }
   }
+  for (const [name, paths] of (Object.entries || (o => Object.keys(o).map(k => [k, o[k]])))(dependencies)) {
+    const ref = typeof getDependency === "function" && getDependency(name) || identifier(name);
+    for (const path of paths) {
+      deep(ast, path, cloneNode(ref));
+    }
+  }
+  adjustAst == null || adjustAst(ast, exportName, map => {
+    exportBindingAssignments.forEach(p => deep(ast, p, map(deep(ast, p))));
+  });
 }
-0 && 0;
+const helperData = Object.create(null);
+function loadHelper(name) {
+  if (!helperData[name]) {
+    const helper = _helpersGenerated.default[name];
+    if (!helper) {
+      throw Object.assign(new ReferenceError(`Unknown helper ${name}`), {
+        code: "BABEL_HELPER_UNKNOWN",
+        helper: name
+      });
+    }
+    helperData[name] = {
+      minVersion: helper.minVersion,
+      build(getDependency, bindingName, localBindings, adjustAst) {
+        const ast = helper.ast();
+        permuteHelperAST(ast, helper.metadata, bindingName, localBindings, getDependency, adjustAst);
+        return {
+          nodes: ast.body,
+          globals: helper.metadata.globals
+        };
+      },
+      getDependencies() {
+        return Object.keys(helper.metadata.dependencies);
+      }
+    };
+  }
+  return helperData[name];
+}
+function get(name, getDependency, bindingName, localBindings, adjustAst) {
+  if (typeof bindingName === "object") {
+    const id = bindingName;
+    if ((id == null ? void 0 : id.type) === "Identifier") {
+      bindingName = id.name;
+    } else {
+      bindingName = undefined;
+    }
+  }
+  return loadHelper(name).build(getDependency, bindingName, localBindings, adjustAst);
+}
+function minVersion(name) {
+  return loadHelper(name).minVersion;
+}
+function getDependencies(name) {
+  return loadHelper(name).getDependencies();
+}
+function isInternal(name) {
+  var _helpers$name;
+  return (_helpers$name = _helpersGenerated.default[name]) == null ? void 0 : _helpers$name.metadata.internal;
+}
+exports.ensure = name => {
+  loadHelper(name);
+};
+const list = exports.list = Object.keys(_helpersGenerated.default).map(name => name.replace(/^_/, ""));
+var _default = exports.default = get;
 
 //# sourceMappingURL=index.js.map
