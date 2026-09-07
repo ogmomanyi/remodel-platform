@@ -1,6 +1,6 @@
 [build]
-  command = "cd remodel-app && npm run build"
-  publish = "remodel-app/.next"
+  command = "npm run build"
+  publish = ".next"
   base = "remodel-app"
 
 [build.environment]
