@@ -1,6 +1,7 @@
 [build]
-  command = "npm run build"
-  publish = ".next"
+  command = "cd remodel-app && npm run build"
+  publish = "remodel-app/.next"
+  base = "remodel-app"
 
 [build.environment]
   NODE_VERSION = "20"
