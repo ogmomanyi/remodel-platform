@@ -5,6 +5,10 @@ import { getProjectBySlug } from '@/lib/projects';
 import { requireAdmin } from '@/lib/admin-auth';
 import { createAdminClient } from '@/utils/supabase/admin';
 
+const ASSET_BUCKET = 'project-assets';
+const MAX_ASSET_BYTES = 10 * 1024 * 1024;
+const ALLOWED_ASSET_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
+
 type DesignElement = {
   id: string; type: 'room' | 'wall' | 'window' | 'door' | 'sofa' | 'table' | 'plant' | 'text';
   x: number; y: number; width: number; height: number; rotation: number;
@@ -91,5 +95,51 @@ export async function deleteDesignOption(input: { spaceId: string; optionId: str
   const supabase = createAdminClient();
   const { error } = await supabase.from('design_options').delete().eq('id', input.optionId).eq('space_id', input.spaceId);
   if (error) throw new Error(`Could not delete design option: ${error.message}`);
+  revalidatePath('/admin-dashboard');
+}
+
+export async function uploadProjectAsset(input: { projectId: string; spaceId?: string | null; kind: string; altText?: string; file: File }) {
+  await requireAdmin();
+  if (!input.file || !(input.file instanceof File)) throw new Error('Please choose a file.');
+  if (input.file.size <= 0 || input.file.size > MAX_ASSET_BYTES) throw new Error('File must be between 1 byte and 10 MB.');
+  if (!ALLOWED_ASSET_TYPES.has(input.file.type)) throw new Error('Only JPEG, PNG, WebP images and PDF files are supported.');
+  const allowedKinds = new Set(['site_photo', 'plan', 'render', 'moodboard', 'material', 'progress', 'document']);
+  if (!allowedKinds.has(input.kind)) throw new Error('Invalid asset type.');
+
+  const supabase = createAdminClient();
+  const { data: project } = await supabase.from('projects').select('id, slug').eq('id', input.projectId).maybeSingle();
+  if (!project) throw new Error('Project not found.');
+  if (input.spaceId) {
+    const { data: space } = await supabase.from('project_spaces').select('id').eq('id', input.spaceId).eq('project_id', project.id).maybeSingle();
+    if (!space) throw new Error('Selected space does not belong to this project.');
+  }
+
+  const extension = input.file.name.includes('.') ? input.file.name.split('.').pop()!.toLowerCase() : 'bin';
+  const path = `${project.id}/${input.spaceId || 'project'}/${crypto.randomUUID()}.${extension}`;
+  const { error: uploadError } = await supabase.storage.from(ASSET_BUCKET).upload(path, input.file, { contentType: input.file.type, upsert: false });
+  if (uploadError) throw new Error(`Could not upload asset: ${uploadError.message}`);
+
+  const { data: asset, error: assetError } = await supabase.from('project_assets').insert({ project_id: project.id, space_id: input.spaceId || null, kind: input.kind, storage_path: path, alt_text: input.altText?.trim() || null, metadata: { original_name: input.file.name, content_type: input.file.type, size: input.file.size } }).select('id, space_id, kind, storage_path, alt_text, created_at').single();
+  if (assetError || !asset) {
+    await supabase.storage.from(ASSET_BUCKET).remove([path]);
+    throw new Error(`Could not save asset record: ${assetError?.message || 'unknown database error'}`);
+  }
+
+  const { data: signed } = await supabase.storage.from(ASSET_BUCKET).createSignedUrl(path, 60 * 60);
+  await supabase.from('project_events').insert({ project_id: project.id, event_type: 'project_asset_uploaded', actor_email: 'admin', metadata: { asset_id: asset.id, kind: input.kind, space_id: input.spaceId || null } });
+  revalidatePath(`/admin-dashboard/${project.slug}/edit`);
+  revalidatePath(`/${project.slug}`);
+  return { ...asset, signed_url: signed?.signedUrl ?? null };
+}
+
+export async function deleteProjectAsset(input: { projectId: string; assetId: string }) {
+  await requireAdmin();
+  const supabase = createAdminClient();
+  const { data: asset, error: loadError } = await supabase.from('project_assets').select('id, storage_path').eq('id', input.assetId).eq('project_id', input.projectId).maybeSingle();
+  if (loadError || !asset) throw new Error(`Could not find asset: ${loadError?.message || 'asset not found'}`);
+  const { error: removeError } = await supabase.storage.from(ASSET_BUCKET).remove([asset.storage_path]);
+  if (removeError) throw new Error(`Could not remove stored file: ${removeError.message}`);
+  const { error } = await supabase.from('project_assets').delete().eq('id', asset.id).eq('project_id', input.projectId);
+  if (error) throw new Error(`Could not delete asset record: ${error.message}`);
   revalidatePath('/admin-dashboard');
 }
