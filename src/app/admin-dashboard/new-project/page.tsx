@@ -2,8 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireAdmin } from '@/lib/admin-auth';
-import fs from 'fs';
-import path from 'path';
+import { createAdminClient } from '@/utils/supabase/admin';
 
 function slugify(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
@@ -13,33 +12,43 @@ function parseEmails(value: string) {
   return value.split(/[\n,;]/).map((email) => email.trim().toLowerCase()).filter(Boolean);
 }
 
-export default async function NewProjectPage() {
+export default async function NewProjectPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   await requireAdmin();
+  const params = await searchParams;
 
   async function createProject(formData: FormData) {
     'use server';
     await requireAdmin();
-
     const clientName = String(formData.get('client_name') || '').trim();
     const projectCode = String(formData.get('project_code') || '').trim().toUpperCase();
     const emails = parseEmails(String(formData.get('allowed_emails') || ''));
     const projectSlug = slugify(String(formData.get('slug') || clientName));
     const description = String(formData.get('description') || '').trim();
 
-    if (!clientName || !projectCode || !projectSlug) {
-      redirect('/admin-dashboard/new-project?error=Please complete the required fields');
+    if (!clientName || !projectCode || !projectSlug) redirect('/admin-dashboard/new-project?error=Please complete the required fields');
+
+    const supabase = createAdminClient();
+    const { data: project, error } = await supabase.from('projects').insert({
+      project_code: projectCode,
+      slug: projectSlug,
+      client_name: clientName,
+      description,
+      status: 'draft',
+    }).select('id, slug').single();
+
+    if (error || !project) {
+      const message = error?.code === '23505' ? 'Project code or slug already exists' : 'Could not create project. Run the Design Studio migration and configure SUPABASE_SERVICE_ROLE_KEY.';
+      redirect(`/admin-dashboard/new-project?error=${encodeURIComponent(message)}`);
     }
 
-    const projectsDir = path.join(process.cwd(), 'src/content/projects');
-    const projectDir = path.join(projectsDir, projectSlug);
-    if (!fs.existsSync(projectsDir)) fs.mkdirSync(projectsDir, { recursive: true });
-    if (fs.existsSync(projectDir)) redirect('/admin-dashboard/new-project?error=Project slug already exists');
+    if (emails.length) {
+      const { error: memberError } = await supabase.from('project_members').insert(emails.map((email) => ({ project_id: project.id, email, role: 'client' })));
+      if (memberError) redirect(`/admin-dashboard/new-project?error=${encodeURIComponent('Project created, but client access could not be saved')}`);
+    }
 
-    fs.mkdirSync(projectDir, { recursive: true });
-    const proposal = `---\nclient_name: ${JSON.stringify(clientName)}\nproject_code: ${JSON.stringify(projectCode)}\nstatus: "draft"\nallowed_emails: ${JSON.stringify(emails)}\nmaterials_required: []\ncarpentry_labor_hours: 0\n---\n\n# ${clientName}\n\n## Project vision\n\n${description || 'Add the project vision and design brief in the Design Studio.'}\n\n## Design direction\n\nAdd design options, materials and visualisations from the Design Studio.\n`;
-    fs.writeFileSync(path.join(projectDir, 'proposal.mdx'), proposal, 'utf8');
+    await supabase.from('project_events').insert({ project_id: project.id, event_type: 'project_created', metadata: { source: 'admin_dashboard' } });
     revalidatePath('/admin-dashboard');
-    redirect(`/admin-dashboard/${projectSlug}/edit`);
+    redirect(`/admin-dashboard/${project.slug}/edit`);
   }
 
   return (
@@ -48,7 +57,8 @@ export default async function NewProjectPage() {
         <Link href="/admin-dashboard" className="text-sm text-slate-600 hover:text-black">← Back to dashboard</Link>
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-7 mt-4">
           <h1 className="text-2xl font-bold text-gray-900">Create a project</h1>
-          <p className="text-gray-500 mt-1 mb-7">Set up the client and project brief. You can build the spaces, visuals and presentation next.</p>
+          <p className="text-gray-500 mt-1 mb-7">Start the project record, then build spaces, concepts, visuals and the client presentation.</p>
+          {params.error && <div className="mb-5 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{params.error}</div>}
           <form action={createProject} className="space-y-5">
             <Field label="Client / project name" name="client_name" required placeholder="e.g. Karen Residence Renovation" />
             <Field label="Project code" name="project_code" required placeholder="e.g. PRJ-2026-005" />
