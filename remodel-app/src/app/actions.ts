@@ -2,9 +2,10 @@
 
 import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
 
 export async function approveProposal(projectCode: string) {
-  const supabase = await createClient();
+  const supabase = await createClient(await cookies());
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
