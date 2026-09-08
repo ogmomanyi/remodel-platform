@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import { MDXRemote } from 'next-mdx-remote/rsc';
 import { MaterialCard } from '@/components/mdx/MaterialCard';
 import { createClient } from '@/utils/supabase/server';
@@ -9,8 +10,12 @@ import { ApproveButton } from '@/components/ApproveButton';
 
 const components = { MaterialCard };
 
-export default async function ClientPresentation({ params }: { params: { client: string } }) {
-  const { client } = params;
+type ClientPresentationProps = {
+  params: Promise<{ client: string }>;
+};
+
+export default async function ClientPresentation({ params }: ClientPresentationProps) {
+  const { client } = await params;
   const filePath = path.join(process.cwd(), 'src/content', 'projects', client, 'proposal.mdx');
 
   if (!fs.existsSync(filePath)) {
@@ -20,7 +25,7 @@ export default async function ClientPresentation({ params }: { params: { client:
   const fileContent = fs.readFileSync(filePath, 'utf8');
   const { content, data: frontmatter } = matter(fileContent);
 
-  const supabase = await createClient();
+  const supabase = await createClient(await cookies());
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect(`/login?next=/${client}`);
