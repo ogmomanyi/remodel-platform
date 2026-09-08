@@ -3,10 +3,11 @@ import path from 'path';
 import matter from 'gray-matter';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import { createClient } from '@/utils/supabase/server';
 
 export default async function ClientDashboard() {
-  const supabase = await createClient();
+  const supabase = await createClient(await cookies());
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
