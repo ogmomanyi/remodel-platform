@@ -3,16 +3,28 @@
 import { useState } from 'react';
 import { saveScratchDesign } from '@/app/admin-dashboard/actions';
 
-type Element = { id: string; type: string; x: number; y: number; width: number; height: number; rotation: number; label?: string; finish?: string; accent?: string; material?: string };
-type Design = { id: string; name: string; elements: Element[]; version: number; updated_at: string; space_id?: string | null };
+type DesignElement = {
+  id: string;
+  type: 'room' | 'wall' | 'window' | 'door' | 'sofa' | 'table' | 'plant' | 'text';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  label?: string;
+  finish?: string;
+  accent?: string;
+  material?: string;
+};
+type Design = { id: string; name: string; elements: DesignElement[]; version: number; updated_at: string; space_id?: string | null };
 type Space = { id: string; name: string };
-const palette = [{type:'room',label:'Room',w:360,h:220},{type:'wall',label:'Wall',w:160,h:14},{type:'window',label:'Window',w:110,h:10},{type:'door',label:'Door',w:80,h:12},{type:'sofa',label:'Sofa',w:130,h:58},{type:'table',label:'Table',w:82,h:82},{type:'plant',label:'Plant',w:46,h:46},{type:'text',label:'Label',w:120,h:30}];
+const palette: Array<{type: DesignElement['type'];label:string;w:number;h:number}> = [{type:'room',label:'Room',w:360,h:220},{type:'wall',label:'Wall',w:160,h:14},{type:'window',label:'Window',w:110,h:10},{type:'door',label:'Door',w:80,h:12},{type:'sofa',label:'Sofa',w:130,h:58},{type:'table',label:'Table',w:82,h:82},{type:'plant',label:'Plant',w:46,h:46},{type:'text',label:'Label',w:120,h:30}];
 const styles = { modern:['#f1f5f9','#cbd5e1','#b08968','#334155'], warm:['#f5efe6','#c9a889','#8b5e3c','#92400e'], luxury:['#f7f4ef','#b8a58f','#6b4f3a','#7c5c35'], african:['#eee7dc','#b89978','#704c35','#7f3f24'], japandi:['#f2f0e9','#c7c0b4','#9b8064','#575f45'], minimal:['#fafafa','#d4d4d4','#a3a3a3','#404040'] } as const;
 export function ScratchDesignStudioV2({ projectSlug, initialDesigns=[], spaces=[] }: { projectSlug:string; initialDesigns?:Design[]; spaces?:Space[] }) {
- const [elements,setElements]=useState<Element[]>(initialDesigns[0]?.elements??[]); const [designs,setDesigns]=useState(initialDesigns); const [designId,setDesignId]=useState<string|null>(initialDesigns[0]?.id??null); const [name,setName]=useState(initialDesigns[0]?.name??'Concept 01'); const [spaceId,setSpaceId]=useState(initialDesigns[0]?.space_id??spaces[0]?.id??''); const [selected,setSelected]=useState<string|null>(null); const [style,setStyle]=useState<keyof typeof styles>('modern'); const [saving,setSaving]=useState(false); const [message,setMessage]=useState('');
+ const [elements,setElements]=useState<DesignElement[]>(initialDesigns[0]?.elements??[]); const [designs,setDesigns]=useState(initialDesigns); const [designId,setDesignId]=useState<string|null>(initialDesigns[0]?.id??null); const [name,setName]=useState(initialDesigns[0]?.name??'Concept 01'); const [spaceId,setSpaceId]=useState(initialDesigns[0]?.space_id??spaces[0]?.id??''); const [selected,setSelected]=useState<string|null>(null); const [style,setStyle]=useState<keyof typeof styles>('modern'); const [saving,setSaving]=useState(false); const [message,setMessage]=useState('');
  const preset=styles[style];
- const add=(type:string)=>{const p=palette.find(x=>x.type===type)!;const item={id:`${Date.now()}-${Math.random()}`,type,x:100+(elements.length%4)*110,y:80+(elements.length%3)*80,width:p.w,height:p.h,rotation:0,label:p.label};setElements(e=>[...e,item]);setSelected(item.id);setMessage('Unsaved changes')};
- const update=(patch:Partial<Element>)=>{if(!selected)return;setElements(es=>es.map(e=>e.id===selected?{...e,...patch}:e));setMessage('Unsaved changes')};
+ const add=(type:DesignElement['type'])=>{const p=palette.find(x=>x.type===type);if(!p)return;const item:DesignElement={id:`${Date.now()}-${Math.random()}`,type,x:100+(elements.length%4)*110,y:80+(elements.length%3)*80,width:p.w,height:p.h,rotation:0,label:p.label};setElements(e=>[...e,item]);setSelected(item.id);setMessage('Unsaved changes')};
+ const update=(patch:Partial<DesignElement>)=>{if(!selected)return;setElements(es=>es.map(e=>e.id===selected?{...e,...patch}:e));setMessage('Unsaved changes')};
  const beautify=()=>{setElements(es=>es.map(e=>({ ...e, finish:e.type==='room'?preset[0]:e.type==='sofa'?preset[1]:e.type==='table'||e.type==='door'?preset[2]:preset[3], material:style==='african'?'natural timber + stone':style==='luxury'?'stone + brushed metal':'premium finish', accent:preset[3] })));setMessage(`Styled · ${style}`)};
  const save=async()=>{setSaving(true);setMessage('Saving…');try{const s=await saveScratchDesign({projectSlug,designId,name,spaceId:spaceId||null,elements});setDesignId(s.id);setDesigns(ds=>[{...s,elements,space_id:spaceId||null},...ds.filter(d=>d.id!==s.id)]);setMessage(`Saved · v${s.version}`)}catch(e){setMessage(e instanceof Error?e.message:'Could not save.')}finally{setSaving(false)}};
  const newDesign=()=>{setDesignId(null);setName(`Concept ${String(designs.length+1).padStart(2,'0')}`);setElements([]);setSelected(null);setMessage('New unsaved concept')};
