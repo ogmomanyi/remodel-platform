@@ -20,7 +20,7 @@ export default async function ClientPresentation({ params }: { params: { client:
   const fileContent = fs.readFileSync(filePath, 'utf8');
   const { content, data: frontmatter } = matter(fileContent);
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect(`/login?next=/${client}`);
