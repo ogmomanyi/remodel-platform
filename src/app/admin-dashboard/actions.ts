@@ -10,7 +10,6 @@ const MAX_ASSET_BYTES = 10 * 1024 * 1024;
 const ALLOWED_ASSET_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
 
 type DesignElement = { id: string; type: 'room' | 'wall' | 'window' | 'door' | 'sofa' | 'table' | 'plant' | 'text'; x: number; y: number; width: number; height: number; rotation: number; label?: string; finish?: string; accent?: string; material?: string };
-
 type MoodboardItem = { id: string; assetId?: string | null; title: string; category: string; notes?: string; sortOrder: number };
 
 function normaliseLegacyStatus(status: string | undefined) { const allowed = new Set(['draft', 'design', 'proposal', 'sent', 'approved', 'in_progress', 'completed', 'archived']); return status && allowed.has(status) ? status : 'draft'; }
@@ -42,10 +41,7 @@ export async function saveScratchDesign(input: { projectSlug: string; designId?:
 }
 
 export async function saveMoodboard(input: { projectSlug: string; moodboardId?: string | null; name: string; spaceId?: string | null; styleDirection: string; description?: string; palette: string[]; notes?: string; items: MoodboardItem[] }) {
-  await requireAdmin();
-  const name = input.name.trim(); if (!name) throw new Error('A moodboard name is required.');
-  if (!Array.isArray(input.palette) || input.palette.length > 12) throw new Error('A moodboard can contain up to 12 palette colours.');
-  if (!Array.isArray(input.items) || input.items.length > 50) throw new Error('A moodboard can contain up to 50 visual references.');
+  await requireAdmin(); const name = input.name.trim(); if (!name) throw new Error('A moodboard name is required.'); if (!Array.isArray(input.palette) || input.palette.length > 12) throw new Error('A moodboard can contain up to 12 palette colours.'); if (!Array.isArray(input.items) || input.items.length > 50) throw new Error('A moodboard can contain up to 50 visual references.');
   const { supabase, project } = await resolveProject(input.projectSlug);
   if (input.spaceId) { const { data: space } = await supabase.from('project_spaces').select('id').eq('id', input.spaceId).eq('project_id', project.id).maybeSingle(); if (!space) throw new Error('Selected space does not belong to this project.'); }
   const payload = { project_id: project.id, project_space_id: input.spaceId || null, name, description: input.description?.trim() || null, style_direction: input.styleDirection.trim() || 'modern', palette: input.palette.slice(0, 12), notes: input.notes?.trim() || null, status: 'draft', updated_at: new Date().toISOString() };
@@ -55,6 +51,38 @@ export async function saveMoodboard(input: { projectSlug: string; moodboardId?: 
   if (input.items.length) { const { error } = await supabase.from('moodboard_items').insert(input.items.map((item, index) => ({ moodboard_id: board.id, asset_id: item.assetId || null, title: item.title.trim().slice(0, 160) || `Reference ${index + 1}`, category: item.category.trim().slice(0, 80) || 'inspiration', notes: item.notes?.trim() || null, sort_order: index }))); if (error) throw new Error(`Could not save moodboard references: ${error.message}`); }
   await supabase.from('project_events').insert({ project_id: project.id, event_type: input.moodboardId ? 'moodboard_updated' : 'moodboard_created', metadata: { moodboard_id: board.id, name, space_id: input.spaceId || null } });
   revalidatePath(`/admin-dashboard/${project.slug}/edit`); revalidatePath(`/${project.slug}`); revalidatePath('/admin-dashboard'); return board;
+}
+
+export async function createVisualisationBrief(input: { projectSlug: string; name: string; spaceId?: string | null; moodboardId?: string | null; designConceptId?: string | null; sourceAssetId?: string | null }) {
+  await requireAdmin();
+  const name = input.name.trim(); if (!name) throw new Error('A visualisation name is required.');
+  const { supabase, project } = await resolveProject(input.projectSlug);
+  if (input.spaceId) { const { data } = await supabase.from('project_spaces').select('id, name, space_type, existing_notes').eq('id', input.spaceId).eq('project_id', project.id).maybeSingle(); if (!data) throw new Error('Selected space does not belong to this project.'); }
+  let moodboard: any = null;
+  if (input.moodboardId) { const { data, error } = await supabase.from('moodboards').select('id, project_space_id, name, style_direction, palette, description, notes').eq('id', input.moodboardId).eq('project_id', project.id).maybeSingle(); if (error || !data) throw new Error('Moodboard not found.'); moodboard = data; }
+  let concept: any = null;
+  if (input.designConceptId) { const { data, error } = await supabase.from('design_concepts').select('id, project_space_id, name, elements').eq('id', input.designConceptId).eq('project_id', project.id).maybeSingle(); if (error || !data) throw new Error('Design concept not found.'); concept = data; }
+  let sourceAsset: any = null;
+  if (input.sourceAssetId) { const { data, error } = await supabase.from('project_assets').select('id, space_id, kind, storage_path, alt_text, metadata').eq('id', input.sourceAssetId).eq('project_id', project.id).maybeSingle(); if (error || !data) throw new Error('Source asset not found.'); sourceAsset = data; }
+  const { data: space } = input.spaceId ? await supabase.from('project_spaces').select('id, name, space_type, existing_notes').eq('id', input.spaceId).eq('project_id', project.id).maybeSingle() : { data: null };
+  const palette = Array.isArray(moodboard?.palette) ? moodboard.palette.join(', ') : '';
+  const prompt = [
+    'Create a photorealistic interior design visualisation for a renovation project.',
+    space ? `Room: ${space.name} (${space.space_type}).` : 'Scope: whole project.',
+    moodboard ? `Design direction: ${moodboard.style_direction}.` : '',
+    moodboard?.description ? `Mood: ${moodboard.description}` : '',
+    palette ? `Colour palette: ${palette}.` : '',
+    moodboard?.notes ? `Designer notes: ${moodboard.notes}` : '',
+    concept ? `Spatial concept: ${concept.name}. Preserve the proportions and placement implied by the supplied concept.` : '',
+    sourceAsset ? 'Use the supplied source room/site image as the visual base. Preserve architecture, camera perspective and major openings while applying the proposed design.' : 'Use a realistic architectural photography viewpoint appropriate to the room.',
+    'Prioritise believable materials, natural lighting, accurate scale, realistic joinery and high-end residential styling.',
+  ].filter(Boolean).join('\n');
+  const negativePrompt = 'cartoon, illustration, CGI-looking surfaces, distorted architecture, extra windows, extra doors, warped furniture, duplicate objects, unrealistic proportions, text, watermark';
+  const { data: saved, error } = await supabase.from('visualisations').insert({ project_id: project.id, project_space_id: input.spaceId || moodboard?.project_space_id || concept?.project_space_id || null, moodboard_id: moodboard?.id || null, design_concept_id: concept?.id || null, source_asset_id: sourceAsset?.id || null, name, prompt, negative_prompt: negativePrompt, status: 'brief', metadata: { generated_at: new Date().toISOString(), pipeline_version: 1 } }).select('id, name, status, prompt, negative_prompt, created_at').single();
+  if (error || !saved) throw new Error(`Could not create visualisation brief: ${error?.message || 'unknown database error'}`);
+  await supabase.from('project_events').insert({ project_id: project.id, event_type: 'visualisation_brief_created', metadata: { visualisation_id: saved.id, moodboard_id: moodboard?.id || null, design_concept_id: concept?.id || null, source_asset_id: sourceAsset?.id || null } });
+  revalidatePath(`/admin-dashboard/${project.slug}/edit`); revalidatePath(`/${project.slug}`);
+  return saved;
 }
 
 export async function createSpace(input: { projectId: string; name: string; spaceType: string }) { await requireAdmin(); const name = input.name.trim(); if (!name) throw new Error('Space name is required.'); const supabase = createAdminClient(); const { data: existing } = await supabase.from('project_spaces').select('sort_order').eq('project_id', input.projectId).order('sort_order', { ascending: false }).limit(1).maybeSingle(); const { data, error } = await supabase.from('project_spaces').insert({ project_id: input.projectId, name, space_type: input.spaceType, sort_order: (existing?.sort_order ?? -1) + 1 }).select('id, name, space_type, existing_notes').single(); if (error || !data) throw new Error(`Could not create space: ${error?.message || 'unknown database error'}`); revalidatePath('/admin-dashboard'); return data; }
