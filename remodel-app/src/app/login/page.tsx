@@ -1,12 +1,19 @@
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 
-export default function LoginPage({ searchParams }: { searchParams: { next?: string } }) {
+type LoginPageProps = {
+  searchParams: Promise<{ next?: string }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const { next } = await searchParams;
+
   async function signIn(formData: FormData) {
     'use server';
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
-    const supabase = await createClient();
+    const supabase = await createClient(await cookies());
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -17,7 +24,7 @@ export default function LoginPage({ searchParams }: { searchParams: { next?: str
       return redirect('/login?message=Could not authenticate user');
     }
 
-    return redirect(searchParams.next || '/');
+    return redirect(next || '/');
   }
 
   return (
