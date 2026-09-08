@@ -22,11 +22,19 @@ create index if not exists design_concepts_space_id_idx on design_concepts(proje
 
 alter table design_concepts enable row level security;
 
-create policy "Clients can read their design concepts" on design_concepts for select to authenticated
-using (exists (
-  select 1 from project_members m
-  where m.project_id = design_concepts.project_id
-    and lower(m.email) = lower(coalesce(auth.jwt()->>'email',''))
-));
+-- Idempotent policy creation for fresh Supabase projects.
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies where schemaname = 'public' and tablename = 'design_concepts' and policyname = 'Clients can read their design concepts'
+  ) then
+    create policy "Clients can read their design concepts" on design_concepts for select to authenticated
+    using (exists (
+      select 1 from project_members m
+      where m.project_id = design_concepts.project_id
+        and lower(m.email) = lower(coalesce(auth.jwt()->>'email',''))
+    ));
+  end if;
+end $$;
 
 -- Admin writes use the service role and intentionally bypass RLS.
