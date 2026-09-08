@@ -1,9 +1,10 @@
 import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
+  const supabase = await createClient(await cookies());
 
   const { data: { user } } = await supabase.auth.getUser();
 
