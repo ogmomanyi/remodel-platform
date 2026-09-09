@@ -2,21 +2,8 @@
 
 import { useState } from 'react';
 import { saveScratchDesign } from '@/app/admin-dashboard/actions';
+import type { DesignElement, PersistedDesign } from '@/lib/design-types';
 
-type DesignElement = {
-  id: string;
-  type: 'room' | 'wall' | 'window' | 'door' | 'sofa' | 'table' | 'plant' | 'text';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotation: number;
-  label?: string;
-  finish?: string;
-  accent?: string;
-  material?: string;
-};
-type Design = { id: string; name: string; elements: DesignElement[]; version: number; updated_at: string; space_id?: string | null };
 type Space = { id: string; name: string };
 const palette: Array<{ type: DesignElement['type']; label: string; w: number; h: number }> = [
   { type: 'room', label: 'Room', w: 360, h: 220 }, { type: 'wall', label: 'Wall', w: 160, h: 14 },
@@ -26,9 +13,9 @@ const palette: Array<{ type: DesignElement['type']; label: string; w: number; h:
 ];
 const styles = { modern: ['#f1f5f9','#cbd5e1','#b08968','#334155'], warm: ['#f5efe6','#c9a889','#8b5e3c','#92400e'], luxury: ['#f7f4ef','#b8a58f','#6b4f3a','#7c5c35'], african: ['#eee7dc','#b89978','#704c35','#7f3f24'], japandi: ['#f2f0e9','#c7c0b4','#9b8064','#575f45'], minimal: ['#fafafa','#d4d4d4','#a3a3a3','#404040'] } as const;
 
-export function ScratchDesignStudioV2({ projectSlug, initialDesigns = [], spaces = [] }: { projectSlug: string; initialDesigns?: Design[]; spaces?: Space[] }) {
+export function ScratchDesignStudioV2({ projectSlug, initialDesigns = [], spaces = [] }: { projectSlug: string; initialDesigns?: PersistedDesign[]; spaces?: Space[] }) {
   const [elements, setElements] = useState<DesignElement[]>(initialDesigns[0]?.elements ?? []);
-  const [designs, setDesigns] = useState(initialDesigns);
+  const [designs, setDesigns] = useState<PersistedDesign[]>(initialDesigns);
   const [designId, setDesignId] = useState<string | null>(initialDesigns[0]?.id ?? null);
   const [name, setName] = useState(initialDesigns[0]?.name ?? 'Concept 01');
   const [spaceId, setSpaceId] = useState(initialDesigns[0]?.space_id ?? spaces[0]?.id ?? '');
@@ -55,7 +42,8 @@ export function ScratchDesignStudioV2({ projectSlug, initialDesigns = [], spaces
     setSaving(true); setMessage('Saving…');
     try {
       const s = await saveScratchDesign({ projectSlug, designId, name, spaceId: spaceId || null, elements });
-      setDesignId(s.id); setDesigns((ds) => [{ ...s, elements, space_id: spaceId || null }, ...ds.filter((d) => d.id !== s.id)]); setMessage(`Saved · v${s.version}`);
+      const saved: PersistedDesign = { ...s, elements, space_id: spaceId || null };
+      setDesignId(saved.id); setDesigns((ds) => [saved, ...ds.filter((d) => d.id !== saved.id)]); setMessage(`Saved · v${saved.version}`);
     } catch (e) { setMessage(e instanceof Error ? e.message : 'Could not save.'); } finally { setSaving(false); }
   };
   const newDesign = () => { setDesignId(null); setName(`Concept ${String(designs.length + 1).padStart(2, '0')}`); setElements([]); setSelected(null); setMessage('New unsaved concept'); };
