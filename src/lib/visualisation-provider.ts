@@ -24,13 +24,26 @@ async function parseImageResponse(response: Response) {
 export async function generateVisualisation(input: { prompt: string; negativePrompt?: string | null; sourceAssetStoragePath?: string | null }) {
   const key = process.env.POLLINATIONS_API_KEY;
   if (!key) throw new Error('POLLINATIONS_API_KEY is required. Add a Pollinations API key to the server environment.');
-  const model = input.sourceAssetStoragePath ? (process.env.POLLINATIONS_EDIT_MODEL || 'klein') : (process.env.POLLINATIONS_MODEL || 'flux');
+
+  const model = input.sourceAssetStoragePath
+    ? (process.env.POLLINATIONS_EDIT_MODEL || 'klein')
+    : (process.env.POLLINATIONS_MODEL || 'flux');
+
+  const prompt = [
+    input.prompt.trim(),
+    input.negativePrompt?.trim() ? `Avoid: ${input.negativePrompt.trim()}` : '',
+  ].filter(Boolean).join('\n\n');
+
   const supabase = createAdminClient();
   let sourceUrl: string | null = null;
 
   if (input.sourceAssetStoragePath) {
-    const { data, error } = await supabase.storage.from(ASSET_BUCKET).createSignedUrl(input.sourceAssetStoragePath, 10 * 60);
-    if (error || !data?.signedUrl) throw new Error(`Could not create a temporary source-image URL: ${error?.message || 'unknown storage error'}`);
+    const { data, error } = await supabase.storage
+      .from(ASSET_BUCKET)
+      .createSignedUrl(input.sourceAssetStoragePath, 10 * 60);
+    if (error || !data?.signedUrl) {
+      throw new Error(`Could not create a temporary source-image URL: ${error?.message || 'unknown storage error'}`);
+    }
     sourceUrl = data.signedUrl;
   }
 
@@ -38,7 +51,13 @@ export async function generateVisualisation(input: { prompt: string; negativePro
     const response = await fetch(`${POLLINATIONS_URL}/v1/images/edits`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, prompt: input.prompt, image: sourceUrl, size: '1024x1024', response_format: 'b64_json' }),
+      body: JSON.stringify({
+        model,
+        prompt,
+        image: sourceUrl,
+        size: '1024x1024',
+        response_format: 'b64_json',
+      }),
       cache: 'no-store',
     });
     return parseImageResponse(response);
@@ -47,8 +66,17 @@ export async function generateVisualisation(input: { prompt: string; negativePro
   const response = await fetch(`${POLLINATIONS_URL}/v1/images/generations`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, prompt: input.prompt, n: 1, size: '1024x1024', quality: 'medium', response_format: 'b64_json', safe: true }),
+    body: JSON.stringify({
+      model,
+      prompt,
+      n: 1,
+      size: '1024x1024',
+      quality: 'medium',
+      response_format: 'b64_json',
+      safe: true,
+    }),
     cache: 'no-store',
   });
+
   return parseImageResponse(response);
 }
