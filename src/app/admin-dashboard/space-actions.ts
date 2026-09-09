@@ -13,8 +13,8 @@ export type SpaceMeasurements = {
 };
 
 function cleanMeasurement(value: number | null | undefined) {
-  if (value === null || value === undefined || value === '') return null;
-  if (!Number.isFinite(value) || value < 0 || value > 1000) throw new Error('Measurements must be valid positive numbers.');
+  if (value === null || value === undefined) return null;
+  if (!Number.isFinite(value) || value < 0 || value > 1000) throw new Error('Measurements must be valid non-negative numbers.');
   return value;
 }
 
