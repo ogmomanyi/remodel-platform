@@ -36,20 +36,33 @@ export async function renderVisualisation(input: { visualisationId: string }) {
   const supabase = createAdminClient();
   const { data: job, error } = await supabase.from('visualisations').select('id, project_id, project_space_id, name, prompt, negative_prompt, source_asset_id, metadata').eq('id', input.visualisationId).maybeSingle();
   if (error || !job) throw new Error(`Could not load visualisation: ${error?.message || 'not found'}`);
+
   await supabase.from('visualisations').update({ status: 'generating', provider: 'pollinations', updated_at: new Date().toISOString() }).eq('id', job.id);
   try {
     let sourcePath: string | null = null;
-    if (job.source_asset_id) { const { data: source } = await supabase.from('project_assets').select('storage_path').eq('id', job.source_asset_id).maybeSingle(); sourcePath = source?.storage_path ?? null; }
+    if (job.source_asset_id) {
+      const { data: source } = await supabase.from('project_assets').select('storage_path').eq('id', job.source_asset_id).maybeSingle();
+      sourcePath = source?.storage_path ?? null;
+    }
+
     const result = await generateVisualisation({ prompt: job.prompt, negativePrompt: job.negative_prompt, sourceAssetStoragePath: sourcePath });
     const ext = result.contentType.includes('png') ? 'png' : 'jpg';
     const storagePath = `${job.project_id}/visualisations/${job.id}.${ext}`;
     const { error: uploadError } = await supabase.storage.from('project-assets').upload(storagePath, result.bytes, { contentType: result.contentType, upsert: true });
     if (uploadError) throw new Error(`Could not save generated visualisation: ${uploadError.message}`);
-    const { data: asset, error: assetError } = await supabase.from('project_assets').insert({ project_id: job.project_id, space_id: job.project_space_id, kind: 'render', storage_path: storagePath, alt_text: job.name, metadata: { visualisation_id: job.id, provider: 'pollinations' } }).select('id').single();
+
+    const { data: asset, error: assetError } = await supabase.from('project_assets').insert({ project_id: job.project_id, space_id: job.project_space_id, kind: 'render', storage_path: storagePath, alt_text: job.name, metadata: { visualisation_id: job.id, provider: 'pollinations', model: job.source_asset_id ? (process.env.POLLINATIONS_EDIT_MODEL || 'klein') : (process.env.POLLINATIONS_MODEL || 'flux') } }).select('id').single();
     if (assetError || !asset) throw new Error(`Could not create render asset: ${assetError?.message || 'unknown error'}`);
-    await supabase.from('visualisations').update({ status: 'ready', output_asset_id: asset.id, updated_at: new Date().toISOString() }).eq('id', job.id);
+
+    const nextMetadata = { ...(job.metadata || {}), rendered_at: new Date().toISOString(), output_asset_id: asset.id };
+    await supabase.from('visualisations').update({ status: 'ready', output_asset_id: asset.id, metadata: nextMetadata, updated_at: new Date().toISOString() }).eq('id', job.id);
     await supabase.from('project_events').insert({ project_id: job.project_id, event_type: 'visualisation_rendered', actor_email: 'admin', metadata: { visualisation_id: job.id, asset_id: asset.id, provider: 'pollinations' } });
-    revalidatePath(`/admin-dashboard/${job.metadata?.project_slug || ''}/visualise`); revalidatePath(`/admin-dashboard/${job.metadata?.project_slug || ''}/edit`);
+
+    const projectSlug = typeof job.metadata?.project_slug === 'string' ? job.metadata.project_slug : '';
+    if (projectSlug) {
+      revalidatePath(`/admin-dashboard/${projectSlug}/visualise`);
+      revalidatePath(`/admin-dashboard/${projectSlug}/edit`);
+    }
     return { id: job.id, assetId: asset.id, status: 'ready' as const };
   } catch (renderError) {
     await supabase.from('visualisations').update({ status: 'failed', metadata: { ...(job.metadata || {}), error: renderError instanceof Error ? renderError.message : 'Unknown render error' }, updated_at: new Date().toISOString() }).eq('id', job.id);
