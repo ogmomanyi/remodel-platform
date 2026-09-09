@@ -15,7 +15,7 @@ export default async function VisualisePage({ params }: { params: Promise<{ proj
     supabase.from('moodboards').select('id, name, project_space_id, style_direction, palette').eq('project_id', project.id).neq('status', 'archived').order('updated_at', { ascending: false }),
     supabase.from('design_concepts').select('id, name, project_space_id, design_type').eq('project_id', project.id).eq('design_type', 'scratch').order('updated_at', { ascending: false }),
     supabase.from('project_assets').select('id, space_id, kind, alt_text, storage_path').eq('project_id', project.id).order('created_at', { ascending: false }),
-    supabase.from('visualisations').select('id, name, status, project_space_id, moodboard_id, design_concept_id, source_asset_id, created_at').eq('project_id', project.id).order('created_at', { ascending: false }),
+    supabase.from('visualisations').select('id, name, status, project_space_id, moodboard_id, design_concept_id, source_asset_id, output_asset_id, created_at').eq('project_id', project.id).order('created_at', { ascending: false }),
   ]);
 
   const signedAssets = await Promise.all((assets ?? []).map(async (asset) => {
@@ -23,8 +23,11 @@ export default async function VisualisePage({ params }: { params: Promise<{ proj
     return { ...asset, signed_url: data?.signedUrl ?? null };
   }));
 
+  const renderAssetIds = new Set((visualisations ?? []).map(v => v.output_asset_id).filter(Boolean));
+  const renderAssets = signedAssets.filter(a => renderAssetIds.has(a.id)).map(a => ({ id: a.id, signed_url: a.signed_url, alt_text: a.alt_text }));
+
   return <main className="min-h-screen bg-stone-50 px-6 py-10"><div className="mx-auto max-w-7xl">
     <div className="mb-6 flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">{project.project_code} · {project.client_name}</p><h1 className="mt-1 text-3xl font-semibold tracking-tight text-stone-900">Visualisation Studio</h1><p className="mt-1 text-sm text-stone-500">Prepare a controlled brief for photorealistic room visualisation.</p></div><Link href={`/admin-dashboard/${slug}/edit`} className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700">Back to Design Studio</Link></div>
-    <VisualisationBriefStudio projectSlug={slug} spaces={spaces ?? []} moodboards={moodboards ?? []} concepts={concepts ?? []} assets={signedAssets} visualisations={visualisations ?? []} />
+    <VisualisationBriefStudio projectSlug={slug} spaces={spaces ?? []} moodboards={moodboards ?? []} concepts={concepts ?? []} assets={signedAssets} visualisations={visualisations ?? []} renderAssets={renderAssets} />
   </div></main>;
 }
