@@ -11,7 +11,7 @@ import MoodboardStudio from '@/components/admin/MoodboardStudio';
 import VisualisationStudio from '@/components/admin/VisualisationStudio';
 import type { DesignElement } from '@/lib/design-types';
 
-type Space = { id: string; name: string; space_type: string; existing_notes: string | null; options: Array<{ id: string; name: string; description: string | null; cost_estimate: number | null; currency: string; status: string; is_recommended: boolean }> };
+type Space = { id: string; name: string; space_type: string; existing_notes: string | null; measurements: Record<string, unknown>; options: Array<{ id: string; name: string; description: string | null; cost_estimate: number | null; currency: string; status: string; is_recommended: boolean }> };
 type Asset = { id: string; space_id: string | null; kind: string; storage_path: string; alt_text: string | null; created_at: string; signed_url?: string | null };
 
 export default async function DesignStudioPage({ params }: { params: Promise<{ project: string }> }) {
@@ -31,7 +31,7 @@ export default async function DesignStudioPage({ params }: { params: Promise<{ p
   if (dbProject) {
     const [{ data: members }, { data: dbSpaces }, { data: dbDesigns }, { data: dbAssets }, { data: dbMoodboards }, { data: dbVisualisations }] = await Promise.all([
       supabase.from('project_members').select('email').eq('project_id', dbProject.id),
-      supabase.from('project_spaces').select('id, name, space_type, existing_notes').eq('project_id', dbProject.id).order('sort_order'),
+      supabase.from('project_spaces').select('id, name, space_type, existing_notes, measurements').eq('project_id', dbProject.id).order('sort_order'),
       supabase.from('design_concepts').select('id, name, elements, version, updated_at, project_space_id').eq('project_id', dbProject.id).eq('design_type', 'scratch').order('updated_at', { ascending: false }),
       supabase.from('project_assets').select('id, space_id, kind, storage_path, alt_text, created_at').eq('project_id', dbProject.id).order('created_at', { ascending: false }),
       supabase.from('moodboards').select('id, name, project_space_id, style_direction, palette, description, notes, updated_at').eq('project_id', dbProject.id).order('updated_at', { ascending: false }),
@@ -40,7 +40,7 @@ export default async function DesignStudioPage({ params }: { params: Promise<{ p
     emails = (members ?? []).map(m => m.email);
     const spaceIds = (dbSpaces ?? []).map(s => s.id);
     const { data: options } = spaceIds.length ? await supabase.from('design_options').select('id, space_id, name, description, cost_estimate, currency, status, is_recommended').in('space_id', spaceIds).order('sort_order') : { data: [] };
-    spaces = (dbSpaces ?? []).map(s => ({ ...s, options: (options ?? []).filter(o => o.space_id === s.id).map(({ space_id, ...o }) => o) }));
+    spaces = (dbSpaces ?? []).map(s => ({ ...s, measurements: s.measurements && typeof s.measurements === 'object' ? s.measurements as Record<string, unknown> : {}, options: (options ?? []).filter(o => o.space_id === s.id).map(({ space_id, ...o }) => o) }));
     designs = (dbDesigns ?? []).map(d => ({ id: d.id, name: d.name, elements: Array.isArray(d.elements) ? d.elements as DesignElement[] : [], version: d.version, updated_at: d.updated_at, space_id: d.project_space_id }));
     moodboards = (dbMoodboards ?? []).map(b => ({ ...b, palette: Array.isArray(b.palette) ? b.palette as string[] : [] }));
     visualBriefs = (dbVisualisations ?? []).map(v => v);
