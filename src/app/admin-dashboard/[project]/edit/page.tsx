@@ -9,20 +9,8 @@ import { SpaceManager } from '@/components/admin/SpaceManager';
 import { ProjectAssetManager } from '@/components/admin/ProjectAssetManager';
 import MoodboardStudio from '@/components/admin/MoodboardStudio';
 import VisualisationStudio from '@/components/admin/VisualisationStudio';
+import type { DesignElement } from '@/lib/design-types';
 
-type DesignElement = {
-  id: string;
-  type: 'room' | 'wall' | 'window' | 'door' | 'sofa' | 'table' | 'plant' | 'text';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotation: number;
-  label?: string;
-  finish?: string;
-  accent?: string;
-  material?: string;
-};
 type Space = { id: string; name: string; space_type: string; existing_notes: string | null; options: Array<{ id: string; name: string; description: string | null; cost_estimate: number | null; currency: string; status: string; is_recommended: boolean }> };
 type Asset = { id: string; space_id: string | null; kind: string; storage_path: string; alt_text: string | null; created_at: string; signed_url?: string | null };
 
