@@ -7,9 +7,10 @@ type Space = { id: string; name: string; space_type?: string | null };
 type Moodboard = { id: string; name: string; project_space_id?: string | null; style_direction?: string | null; palette?: string[] | null };
 type Concept = { id: string; name: string; project_space_id?: string | null; design_type?: string | null };
 type Asset = { id: string; space_id?: string | null; kind: string; alt_text?: string | null; signed_url?: string | null };
-type Visualisation = { id: string; name: string; status: string; project_space_id?: string | null; moodboard_id?: string | null; created_at: string };
+type Visualisation = { id: string; name: string; status: string; project_space_id?: string | null; moodboard_id?: string | null; source_asset_id?: string | null; output_asset_id?: string | null; created_at: string };
+type RenderAsset = { id: string; signed_url?: string | null; alt_text?: string | null };
 
-export default function VisualisationBriefStudio({ projectSlug, spaces, moodboards, concepts, assets, visualisations }: { projectSlug: string; spaces: Space[]; moodboards: Moodboard[]; concepts: Concept[]; assets: Asset[]; visualisations: Visualisation[] }) {
+export default function VisualisationBriefStudio({ projectSlug, spaces, moodboards, concepts, assets, visualisations, renderAssets = [] }: { projectSlug: string; spaces: Space[]; moodboards: Moodboard[]; concepts: Concept[]; assets: Asset[]; visualisations: Visualisation[]; renderAssets?: RenderAsset[] }) {
   const [spaceId, setSpaceId] = useState(spaces[0]?.id ?? '');
   const [moodboardId, setMoodboardId] = useState('');
   const [conceptId, setConceptId] = useState('');
@@ -18,24 +19,23 @@ export default function VisualisationBriefStudio({ projectSlug, spaces, moodboar
   const [busy, setBusy] = useState(false);
   const [renderingId, setRenderingId] = useState('');
   const [message, setMessage] = useState('');
-  const [rendered, setRendered] = useState<Visualisation | null>(null);
   const filteredMoodboards = useMemo(() => moodboards.filter(m => !spaceId || !m.project_space_id || m.project_space_id === spaceId), [moodboards, spaceId]);
   const filteredConcepts = useMemo(() => concepts.filter(c => !spaceId || !c.project_space_id || c.project_space_id === spaceId), [concepts, spaceId]);
   const sourceAssets = useMemo(() => assets.filter(a => a.kind === 'site_photo' && (!spaceId || !a.space_id || a.space_id === spaceId)), [assets, spaceId]);
   const selectedBoard = moodboards.find(m => m.id === moodboardId);
+  const outputById = useMemo(() => new Map(renderAssets.map(a => [a.id, a])), [renderAssets]);
 
   async function createBrief() {
     setBusy(true); setMessage('');
-    try { await createVisualisationBrief({ projectSlug, name, spaceId: spaceId || null, moodboardId: moodboardId || null, designConceptId: conceptId || null, sourceAssetId: sourceAssetId || null }); setMessage('Visualisation brief created.'); }
+    try { await createVisualisationBrief({ projectSlug, name, spaceId: spaceId || null, moodboardId: moodboardId || null, designConceptId: conceptId || null, sourceAssetId: sourceAssetId || null }); setMessage('Visualisation brief created. Refreshing…'); window.location.reload(); }
     catch (error) { setMessage(error instanceof Error ? error.message : 'Could not create brief'); }
     finally { setBusy(false); }
   }
 
   async function render(id: string) {
     setRenderingId(id); setMessage('Generating photorealistic visualisation…');
-    try { await renderVisualisation({ visualisationId: id }); setRendered(visualisations.find(v => v.id === id) || null); setMessage('Render completed and saved to project assets. Refresh to view it.'); }
-    catch (error) { setMessage(error instanceof Error ? error.message : 'Could not render visualisation'); }
-    finally { setRenderingId(''); }
+    try { await renderVisualisation({ visualisationId: id }); setMessage('Render completed and saved. Refreshing preview…'); window.location.reload(); }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'Could not render visualisation'); setRenderingId(''); }
   }
 
   return <section className="grid gap-6 lg:grid-cols-[360px_1fr]">
@@ -59,7 +59,7 @@ export default function VisualisationBriefStudio({ projectSlug, spaces, moodboar
         <div className="mt-5 flex gap-2">{(selectedBoard?.palette || []).map((colour, i)=><span key={`${colour}-${i}`} title={colour} className="h-12 w-12 rounded-full border border-white shadow" style={{background: colour}} />)}</div>
         <div className="mt-5 rounded-2xl bg-stone-50 p-4"><p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Pipeline</p><div className="mt-3 grid gap-2 sm:grid-cols-5">{['Source photo','Moodboard','Spatial concept','AI visualisation','Client presentation'].map((step,i)=><div key={step} className="rounded-xl border border-stone-200 bg-white p-3"><span className="text-[10px] text-stone-400">0{i+1}</span><p className="mt-1 text-xs font-medium text-stone-700">{step}</p></div>)}</div></div>
       </div>
-      <div className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm"><div className="flex items-center justify-between"><h3 className="text-lg font-semibold text-stone-900">Visualisation jobs</h3><span className="text-xs text-stone-400">{visualisations.length} briefs</span></div><div className="mt-4 space-y-2">{visualisations.length ? visualisations.map(v=><div key={v.id} className="flex items-center justify-between gap-4 rounded-2xl border border-stone-100 bg-stone-50 p-4"><div><p className="text-sm font-medium text-stone-800">{v.name}</p><p className="mt-1 text-xs text-stone-400">{new Date(v.created_at).toLocaleString()}</p></div><div className="flex items-center gap-2"><span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-stone-600">{v.status}</span>{(v.status === 'brief' || v.status === 'failed') && <button onClick={()=>render(v.id)} disabled={!!renderingId} className="rounded-full bg-stone-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">{renderingId === v.id ? 'Rendering…' : 'Render'}</button>}</div></div>) : <p className="py-8 text-center text-sm text-stone-400">No visualisation briefs yet.</p>}</div></div>
+      <div className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm"><div className="flex items-center justify-between"><h3 className="text-lg font-semibold text-stone-900">Visualisation jobs</h3><span className="text-xs text-stone-400">{visualisations.length} briefs</span></div><div className="mt-4 space-y-3">{visualisations.length ? visualisations.map(v=>{ const output = v.output_asset_id ? outputById.get(v.output_asset_id) : null; return <div key={v.id} className="rounded-2xl border border-stone-100 bg-stone-50 p-4"><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-medium text-stone-800">{v.name}</p><p className="mt-1 text-xs text-stone-400">{new Date(v.created_at).toLocaleString()}</p></div><div className="flex items-center gap-2"><span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-stone-600">{v.status}</span>{(v.status === 'brief' || v.status === 'failed') && <button onClick={()=>render(v.id)} disabled={!!renderingId} className="rounded-full bg-stone-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">{renderingId === v.id ? 'Rendering…' : v.status === 'failed' ? 'Retry render' : 'Render'}</button>}</div></div>{output?.signed_url && <div className="mt-4 overflow-hidden rounded-2xl bg-stone-900"><img src={output.signed_url} alt={output.alt_text || v.name} className="aspect-video w-full object-cover" /></div>}</div>}) : <p className="py-8 text-center text-sm text-stone-400">No visualisation briefs yet.</p>}</div></div>
     </div>
   </section>;
 }
