@@ -11,7 +11,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ proje
   const { data: project } = await supabase.from('projects').select('id, slug, project_code, client_name').eq('slug', slug).maybeSingle(); if (!project) notFound();
   const { data: spaces } = await supabase.from('project_spaces').select('id, name').eq('project_id', project.id).order('sort_order');
   const spaceIds = (spaces ?? []).map((s) => s.id);
-  const { data: options } = spaceIds.length ? await supabase.from('design_options').select('id, space_id, name, description, materials, cost_estimate').in('id', spaceIds.length ? (await supabase.from('design_options').select('id').in('space_id', spaceIds)).data?.map((o) => o.id) ?? [] : []).order('sort_order') : { data: [] };
+  const { data: options } = spaceIds.length ? await supabase.from('design_options').select('id, space_id, name, description, materials, cost_estimate').in('space_id', spaceIds).order('sort_order') : { data: [] };
   const spaceMap = new Map((spaces ?? []).map((s) => [s.id, s.name]));
   const builderOptions = (options ?? []).map((option) => ({ id: option.id, spaceId: option.space_id, spaceName: spaceMap.get(option.space_id) || 'Space', name: option.name, description: option.description, costEstimate: option.cost_estimate, materialCost: buildBom(Array.isArray(option.materials) ? option.materials : []).material_total }));
   const { data: proposals } = await supabase.from('proposals').select('id, proposal_number, version, title, status, currency, subtotal, tax_amount, total, created_at').eq('project_id', project.id).order('version', { ascending: false });
