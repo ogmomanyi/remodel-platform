@@ -37,7 +37,6 @@ export async function renderVisualisation(input: { visualisationId: string; vari
   const variantKey = (input.variantKey || 'primary').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 40) || 'primary';
   const { data: job, error } = await supabase.from('visualisations').select('id, project_id, project_space_id, name, prompt, negative_prompt, source_asset_id, metadata').eq('id', input.visualisationId).maybeSingle();
   if (error || !job) throw new Error(`Could not load visualisation: ${error?.message || 'not found'}`);
-
   const variantPrompt = `${job.prompt}\n\nRender variant: ${variantKey}. Preserve the room architecture, proportions, openings and design brief. Explore a refined alternative composition and styling while remaining faithful to the specified direction.`;
   await supabase.from('visualisations').update({ status: 'generating', variant_key: variantKey, updated_at: new Date().toISOString() }).eq('id', job.id);
   try {
@@ -48,10 +47,10 @@ export async function renderVisualisation(input: { visualisationId: string; vari
     const storagePath = `${job.project_id}/visualisations/${job.id}-${variantKey}.${ext}`;
     const { error: uploadError } = await supabase.storage.from('project-assets').upload(storagePath, result.bytes, { contentType: result.contentType, upsert: true });
     if (uploadError) throw new Error(`Could not save generated visualisation: ${uploadError.message}`);
-    const { data: asset, error: assetError } = await supabase.from('project_assets').insert({ project_id: job.project_id, space_id: job.project_space_id, kind: 'render', storage_path: storagePath, alt_text: `${job.name} — ${variantKey}`, metadata: { visualisation_id: job.id, provider: 'pollinations', variant_key: variantKey, model: job.source_asset_id ? (process.env.POLLINATIONS_EDIT_MODEL || 'klein') : (process.env.POLLINATIONS_MODEL || 'flux') } }).select('id').single();
-    if (assetError || !asset) throw new Error(`Could not create render asset: ${assetError?.message || 'unknown error'}`);
     const model = job.source_asset_id ? (process.env.POLLINATIONS_EDIT_MODEL || 'klein') : (process.env.POLLINATIONS_MODEL || 'flux');
-    const { error: variantError } = await supabase.from('visualisation_variants').upsert({ visualisation_id: job.id, asset_id: asset.id, variant_key: variantKey, prompt: variantPrompt, provider: 'pollinations', model, updated_at: undefined }, { onConflict: 'visualisation_id,variant_key' });
+    const { data: asset, error: assetError } = await supabase.from('project_assets').insert({ project_id: job.project_id, space_id: job.project_space_id, kind: 'render', storage_path: storagePath, alt_text: `${job.name} — ${variantKey}`, metadata: { visualisation_id: job.id, provider: 'pollinations', variant_key: variantKey, model } }).select('id').single();
+    if (assetError || !asset) throw new Error(`Could not create render asset: ${assetError?.message || 'unknown error'}`);
+    const { error: variantError } = await supabase.from('visualisation_variants').upsert({ visualisation_id: job.id, asset_id: asset.id, variant_key: variantKey, prompt: variantPrompt, provider: 'pollinations', model }, { onConflict: 'visualisation_id,variant_key' });
     if (variantError) throw new Error(`Could not save render variant history: ${variantError.message}`);
     const nextMetadata = { ...(job.metadata || {}), rendered_at: new Date().toISOString(), output_asset_id: asset.id };
     await supabase.from('visualisations').update({ status: 'ready', output_asset_id: asset.id, variant_key: variantKey, metadata: nextMetadata, updated_at: new Date().toISOString() }).eq('id', job.id);
@@ -70,7 +69,7 @@ export async function selectVisualisationVariant(input: { visualisationId: strin
   const supabase = createAdminClient();
   const { data: job, error } = await supabase.from('visualisations').select('id, project_id, project_space_id, output_asset_id, variant_key, metadata').eq('id', input.visualisationId).maybeSingle();
   if (error || !job || !job.output_asset_id) throw new Error('A completed visualisation render is required before selecting it.');
-  if (job.project_space_id) await supabase.from('visualisation_variants').update({ is_selected: false }).eq('visualisation_id', job.id).eq('is_selected', true);
+  await supabase.from('visualisation_variants').update({ is_selected: false }).eq('visualisation_id', job.id).eq('is_selected', true);
   await supabase.from('visualisation_variants').update({ is_selected: true }).eq('visualisation_id', job.id).eq('variant_key', job.variant_key || 'primary');
   if (job.project_space_id) await supabase.from('visualisations').update({ is_selected: false }).eq('project_space_id', job.project_space_id).eq('is_selected', true);
   await supabase.from('visualisations').update({ is_selected: true, updated_at: new Date().toISOString() }).eq('id', job.id);
