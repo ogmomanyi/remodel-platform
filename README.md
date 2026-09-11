@@ -61,6 +61,7 @@ Apply the SQL migrations in `supabase/migrations` in numerical order. The curren
 - `013_project_execution.sql`
 - `014_execution_visibility.sql`
 - `015_client_data_hardening.sql`
+- `016_security_performance_hardening.sql`
 
 The `project-assets` bucket is private. Admin uploads and client signed URLs are generated server-side.
 
