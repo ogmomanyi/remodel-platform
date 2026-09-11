@@ -24,7 +24,34 @@ revoke select on visualisations from authenticated;
 drop policy if exists "Clients can read visualisation variants" on visualisation_variants;
 revoke select on visualisation_variants from authenticated;
 
--- Proposal header: hide markup percentage while preserving the actual client quotation.
+-- Proposal header: only released proposals are client-readable, and markup remains hidden.
+drop policy if exists "Clients can read their proposals" on proposals;
+create policy "Clients can read their proposals"
+  on proposals for select to authenticated
+  using (
+    status in ('sent','approved','rejected','expired','superseded')
+    and exists (
+      select 1
+      from project_members m
+      where m.project_id = proposals.project_id
+        and lower(m.email) = lower(coalesce(auth.jwt()->>'email',''))
+    )
+  );
+
+drop policy if exists "Clients can read their proposal lines" on proposal_lines;
+create policy "Clients can read their proposal lines"
+  on proposal_lines for select to authenticated
+  using (
+    exists (
+      select 1
+      from proposals p
+      join project_members m on m.project_id = p.project_id
+      where p.id = proposal_lines.proposal_id
+        and p.status in ('sent','approved','rejected','expired','superseded')
+        and lower(m.email) = lower(coalesce(auth.jwt()->>'email',''))
+    )
+  );
+
 revoke select on proposals from authenticated;
 grant select (
   id,
