@@ -27,7 +27,7 @@ export function ScratchDesignStudioV2({ projectSlug, initialDesigns = [], spaces
   const add = (type: DesignElement['type']) => {
     const p = palette.find((x) => x.type === type);
     if (!p) return;
-    const item: DesignElement = { id: `${Date.now()}-${Math.random()}`, type, x: 100 + (elements.length % 4) * 110, y: 80 + (elements.length % 3) * 80, width: p.w, height: p.h, rotation: 0, label: p.label };
+    const item: DesignElement = { id: crypto.randomUUID(), type, x: 100 + (elements.length % 4) * 110, y: 80 + (elements.length % 3) * 80, width: p.w, height: p.h, rotation: 0, label: p.label };
     setElements((e) => [...e, item]); setSelected(item.id); setMessage('Unsaved changes');
   };
   const update = (patch: Partial<DesignElement>) => {
