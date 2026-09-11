@@ -33,6 +33,9 @@ Legacy MDX project presentations are still supported for backwards compatibility
 
 ## Local setup
 
+Use Node.js 22.12 or newer.
+
+
 ```bash
 git clone https://github.com/ogmomanyi/remodel-platform.git
 cd remodel-platform
