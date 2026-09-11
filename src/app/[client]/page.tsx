@@ -3,6 +3,7 @@ import { MDXRemote } from 'next-mdx-remote/rsc';
 import { MaterialCard } from '@/components/mdx/MaterialCard';
 import { ApproveButton } from '@/components/ApproveButton';
 import { ClientDesignVision } from '@/components/client/ClientDesignVision';
+import { ClientSiteContext } from '@/components/client/ClientSiteContext';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { getProjectBySlug, userCanAccessProject } from '@/lib/projects';
@@ -320,6 +321,8 @@ export default async function ClientPresentation({ params }: Props) {
             <span className="text-sm text-stone-500">{user.email}</span>
           </div>
         </header>
+
+        {relationalProject && <ClientSiteContext projectCode={projectCode} />}
 
         {relationalProject && designCards.length > 0 && (
           <ClientDesignVision cards={designCards} showPricing={false} />
