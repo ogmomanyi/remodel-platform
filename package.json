@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint src",
     "generate:job-sheet": "node src/scripts/generate-job-sheet.js"
   },
   "dependencies": {
@@ -29,5 +29,8 @@
     "puppeteer": "^25.10.0",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }
