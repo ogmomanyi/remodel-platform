@@ -6,11 +6,21 @@ import { saveMoodboard } from '@/app/admin-dashboard/actions';
 type Space = { id: string; name: string; space_type?: string | null };
 type Asset = { id: string; space_id?: string | null; kind: string; alt_text?: string | null; signed_url?: string | null };
 type Item = { id: string; assetId?: string | null; title: string; category: string; notes?: string; sortOrder: number };
+type InitialBoard = {
+  id: string;
+  project_space_id?: string | null;
+  name?: string | null;
+  style_direction?: string | null;
+  description?: string | null;
+  notes?: string | null;
+  palette?: string[] | null;
+  items?: Item[] | null;
+};
 
 const directions = ['Modern', 'Warm Contemporary', 'Luxury', 'African Modern', 'Japandi', 'Minimal'];
 const starterPalette = ['#F2EEE7', '#D8C8B5', '#A58C72', '#4A463F', '#F7F4EF'];
 
-export default function MoodboardStudio({ projectSlug, spaces, assets, initialBoard }: { projectSlug: string; spaces: Space[]; assets: Asset[]; initialBoard?: any | null }) {
+export default function MoodboardStudio({ projectSlug, spaces, assets, initialBoard }: { projectSlug: string; spaces: Space[]; assets: Asset[]; initialBoard?: InitialBoard | null }) {
   const [name, setName] = useState(initialBoard?.name ?? 'New Moodboard');
   const [spaceId, setSpaceId] = useState(initialBoard?.project_space_id ?? spaces[0]?.id ?? '');
   const [direction, setDirection] = useState(initialBoard?.style_direction ?? 'Modern');
