@@ -27,7 +27,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
       redirect(`/admin-dashboard/clients?error=${encodeURIComponent(userError.message)}`);
     }
 
-    let resolvedProjectId = projectId;
+    const resolvedProjectId = projectId;
     const { error: memberError } = await admin.from('project_members').upsert({ project_id: resolvedProjectId, email, role: 'client' }, { onConflict: 'project_id,email' });
     if (memberError) redirect(`/admin-dashboard/clients?error=${encodeURIComponent(`Account created/exists, but project access failed: ${memberError.message}`)}`);
 
