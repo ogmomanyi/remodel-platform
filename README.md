@@ -1,125 +1,122 @@
-# Kota Designs - Renovation Presentation Platform
+# Kota Designs — Renovation Operating Platform
 
-A Git-Driven Renovation Presentation Platform for managing design ideas, client proposals, and project approvals. Built with Next.js, Supabase, and MDX for a professional, version-controlled workflow.
+Kota Designs is a database-first renovation platform for taking a residential project from brief and room survey through design, visualisation, proposal, approval, procurement, site execution and client progress reporting.
 
-## Features
+## Core workflow
 
-- **Git-Driven Content Management**: All proposals, materials, and specifications stored as Markdown/MDX files
-- **Client Portal**: Secure, authenticated dashboard for clients to view and approve proposals
-- **Digital Approvals**: Clients can digitally sign off on proposals with database-backed tracking
-- **Material Catalog**: Reusable specifications for flooring, carpentry, and other renovation materials
-- **Job Sheet Generation**: Automated creation of carpenter work instructions from proposal data
-- **Professional Presentations**: Rich MDX content with interactive components
+**Client → Project → Spaces → Design → Moodboards → AI Visualisation → Proposal → Approval → Procurement → Purchase Orders → Execution → Progress → Handover**
 
-## Tech Stack
+Legacy MDX project presentations are still supported for backwards compatibility, but Supabase is the source of truth for new projects.
 
-- **Next.js 16** with TypeScript and Tailwind CSS
-- **Supabase** for authentication and database
-- **MDX** for rich content authoring
-- **Netlify** for deployment
+## Main capabilities
 
-## Getting Started
+- Secure client accounts and project-level access
+- Editable room/space surveys and existing-condition notes
+- Design concepts, moodboards, materials and BOM inputs
+- AI visualisation briefs, generated variants and selected client visuals
+- Versioned quotations and client proposal approval
+- Procurement lists generated from approved proposal snapshots
+- Supplier allocation and purchase orders
+- Site tasks, priorities, dates, assignees and status tracking
+- Internal vs client-visible execution records
+- Client progress timeline and site-photo gallery
+- Private Supabase Storage with signed asset URLs
+- Audit-style project event records
 
-### Prerequisites
+## Technology
 
-1. Node.js 20 or higher
-2. A Supabase project (free tier works)
-3. Git for version control
+- Next.js 16 / React 19 / TypeScript
+- Tailwind CSS 4
+- Supabase Auth, Postgres and Storage
+- Pollinations image generation/editing
+- Vercel deployment
 
-### Installation
+## Local setup
 
-1. Clone the repository:
 ```bash
 git clone https://github.com/ogmomanyi/remodel-platform.git
 cd remodel-platform
-```
-
-2. Install dependencies:
-```bash
 npm install
-```
-
-3. Set up environment variables:
-```bash
 cp env.example .env.local
-```
-
-Edit `.env.local` with your Supabase credentials:
-```env
-NEXT_PUBLIC_SUPABASE_URL=your-project-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-```
-
-### Database Setup
-
-Follow the [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) guide to:
-- Create the `project_approvals` table
-- Set up Row Level Security policies
-- Add user accounts for your clients
-
-### Development
-
-Run the development server:
-```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser.
+Required environment variables are documented in `env.example`. Never commit `.env.local` or any live secret.
 
-## Usage
+## Database setup
 
-### Creating a New Client Proposal
+Apply the SQL migrations in `supabase/migrations` in numerical order. The current application expects migrations through:
 
-1. Create a new directory in `src/content/projects/[client-name]/`
-2. Add a `proposal.mdx` file with frontmatter:
-```yaml
----
-client_name: "Client Name"
-project_code: "PRJ-2026-001"
-allowed_emails: ["client@example.com"]
-status: "pending-approval"
-materials_required:
-- Material 1
-- Material 2
-carpentry_labor_hours: 24
----
+- `002_design_studio.sql`
+- `003_design_concepts.sql`
+- `004_visual_assets.sql`
+- `005_moodboards.sql`
+- `006_visualisations.sql`
+- `007_proposals.sql`
+- `008_proposal_approval.sql`
+- `009_visualisation_variants.sql`
+- `010_procurement.sql`
+- `011_visualisation_variant_history.sql`
+- `012_purchase_orders.sql`
+- `013_project_execution.sql`
+- `014_execution_visibility.sql`
+
+The `project-assets` bucket is private. Admin uploads and client signed URLs are generated server-side.
+
+## Production environment
+
+Set these in Vercel for the Production environment:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+ADMIN_PASSWORD=
+ADMIN_SESSION_SECRET=
+POLLINATIONS_API_KEY=
 ```
 
-3. Add your proposal content using Markdown and custom components
+Optional:
 
-### Adding Material Specifications
+```env
+POLLINATIONS_MODEL=flux
+POLLINATIONS_EDIT_MODEL=klein
+```
 
-Add catalog items to `src/content/catalog/[category]/[item].md`
+Use a strong, separate `ADMIN_SESSION_SECRET`; the application falls back to `ADMIN_PASSWORD` only for compatibility.
 
-### Generating Job Sheets
+## Validation before release
 
 ```bash
-npm run generate:job-sheet [client-name]
+npm run lint
+npm run build
+```
+
+Then verify in Vercel that the deployment for the current `main` commit is successful.
+
+## Security notes
+
+- Do not expose `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET` or `POLLINATIONS_API_KEY` to the browser.
+- Rotate any secret that has ever been committed to Git history.
+- Admin sessions are signed, expiring, HTTP-only cookies.
+- Client database access is constrained by Supabase RLS and project membership.
+- Progress records can be marked internal so site issues do not automatically appear in the client portal.
+
+## Project structure
+
+```text
+src/app/                         Next.js routes and server actions
+src/components/admin/            Admin design, procurement and execution UI
+src/lib/                         Shared domain logic
+src/content/                     Legacy MDX projects/catalog
+src/utils/supabase/              Browser/server/admin Supabase clients
+supabase/migrations/             Ordered database migrations
 ```
 
 ## Deployment
 
-Deploy to Netlify following the [NETLIFY_DEPLOYMENT.md](./NETLIFY_DEPLOYMENT.md) guide.
-
-## Project Structure
-
-```
-├── src/
-│   ├── app/                    # Next.js app router
-│   ├── components/             # React components
-│   ├── content/                # MDX content
-│   │   ├── catalog/           # Material specifications
-│   │   └── projects/          # Client proposals
-│   ├── scripts/               # Utility scripts
-│   └── utils/                 # Helper functions
-├── public/                    # Static assets
-└── documentation files       # Setup guides
-```
+The canonical app is the repository root and is deployed on Vercel. The nested `remodel-app` directory is not the production root.
 
 ## License
 
-Proprietary - Kota Designs
-
-## Support
-
-For support and documentation, refer to the setup guides in the repository root.
+Proprietary — Kota Designs.
