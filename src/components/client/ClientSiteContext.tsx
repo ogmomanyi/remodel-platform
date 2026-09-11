@@ -45,13 +45,13 @@ export function ClientSiteContext({ projectCode }: SiteContextProps) {
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-400">Site context</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-stone-900">The renovation stays within the existing terrace footprint.</h2>
           <p className="mt-4 text-sm leading-6 text-stone-600">
-            The supplied aerial reference shows the intervention concentrated on the bright/white terrace and canopy strip immediately adjoining the main house. The proposal is therefore treated as a surgical renovation of this zone—not an extension of the overall residence.
+            The supplied aerial reference shows the intervention concentrated on the bright/white terrace and canopy strip immediately adjoining the main house. The proposal is therefore treated as a surgical renovation of this zone—not an extension of the overall residence. Within that footprint, the veranda is organised as two main sections linked by a smaller central connector.
           </p>
 
           <div className="mt-6 space-y-4">
-            <Constraint title="Renovate" text="White terrace/canopy apron, lounge-facing interface, garden-edge planter." />
+            <Constraint title="Renovate" text="Two main veranda sections, a smaller central connector, lounge-facing glazing/door interfaces, continuous flooring, garden steps and the planted outer edge." />
             <Constraint title="Retain" text="Existing brown tiled roofs, main house massing, driveway, established garden and unrelated structures." />
-            <Constraint title="Visualisation rule" text="Future renders must preserve the actual property massing and keep all new work inside the identified renovation zone." />
+            <Constraint title="Visualisation rule" text="Future renders must preserve the actual property massing, show the two veranda sections and central connector correctly, and keep all new work inside the identified renovation zone." />
           </div>
 
           <p className="mt-6 rounded-2xl bg-stone-50 p-4 text-xs leading-5 text-stone-500">
