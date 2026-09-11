@@ -4,6 +4,7 @@ import { MaterialCard } from '@/components/mdx/MaterialCard';
 import { ApproveButton } from '@/components/ApproveButton';
 import { ClientDesignVision } from '@/components/client/ClientDesignVision';
 import { ClientSiteContext } from '@/components/client/ClientSiteContext';
+import { ProjectScaleOverview } from '@/components/client/ProjectScaleOverview';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { getProjectBySlug, userCanAccessProject } from '@/lib/projects';
@@ -98,6 +99,7 @@ export default async function ClientPresentation({ params }: Props) {
   let tasks: ClientTask[] = [];
   let updates: ProgressUpdate[] = [];
   let progressAssets: ProgressAsset[] = [];
+  let projectScaleMetrics: Array<{ label: string; value: string; note?: string; kind: 'quoted' | 'derived' }> = [];
   let designCards: Array<{
     id: string;
     spaceName: string;
@@ -179,6 +181,21 @@ export default async function ClientPresentation({ params }: Props) {
         })),
       };
     }
+
+    projectScaleMetrics = [
+      { label: 'Terrace floor area', value: '110 m²', kind: 'quoted', note: 'Non-slip porcelain floor finish.' },
+      { label: 'Glass canopy area', value: '95 m²', kind: 'quoted', note: '4+4 mm laminated clear glass.' },
+      { label: 'Structural steel', value: '1.665 t', kind: 'quoted', note: 'RHS/SHS steelwork before plates and bolts.' },
+      { label: 'Lounge glazing', value: '27 m²', kind: 'quoted', note: 'Sliding aluminium glazing.' },
+      { label: 'New glazed interface', value: '≈29.9 m²', kind: 'derived', note: '27 m² sliding glazing plus 1.2×2.4 m glazed door.' },
+      { label: 'Steel member length', value: '≈240 m', kind: 'derived', note: 'Theoretical length from quoted steel masses and nominal section sizes.' },
+      { label: 'Vertical supports', value: '≈34', kind: 'derived', note: 'Inferred from 34 base plates; confirm structural layout.' },
+      { label: 'Canopy coverage', value: '≈86%', kind: 'derived', note: '95 m² canopy glass over 110 m² terrace floor area.' },
+      { label: '600×600 tiles', value: '≈337 pcs', kind: 'derived', note: '110 m² plus 10% allowance; excludes skirting if cut separately.' },
+      { label: 'Planter run', value: '≈15 m', kind: 'derived', note: 'Using quoted 15 lm coping as the likely linear extent.' },
+      { label: 'Footing width', value: '≈0.67 m', kind: 'derived', note: 'From 2 m³ concrete at 200 mm thick over a 15 m run.' },
+      { label: 'Average trench depth', value: '≈0.9 m', kind: 'derived', note: 'From 9 m³ excavation over the derived footing plan area.' },
+    ];
 
     const admin = createAdminClient();
     const [
@@ -323,6 +340,10 @@ export default async function ClientPresentation({ params }: Props) {
         </header>
 
         {relationalProject && <ClientSiteContext projectCode={projectCode} />}
+
+        {relationalProject && projectScaleMetrics.length > 0 && (
+          <ProjectScaleOverview metrics={projectScaleMetrics} />
+        )}
 
         {relationalProject && designCards.length > 0 && (
           <ClientDesignVision cards={designCards} showPricing={false} />
