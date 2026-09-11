@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { MDXRemote } from 'next-mdx-remote/rsc';
 import { MaterialCard } from '@/components/mdx/MaterialCard';
 import { ApproveButton } from '@/components/ApproveButton';
+import { ClientDesignVision } from '@/components/client/ClientDesignVision';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { getProjectBySlug, userCanAccessProject } from '@/lib/projects';
@@ -96,6 +97,19 @@ export default async function ClientPresentation({ params }: Props) {
   let tasks: ClientTask[] = [];
   let updates: ProgressUpdate[] = [];
   let progressAssets: ProgressAsset[] = [];
+  let designCards: Array<{
+    id: string;
+    spaceName: string;
+    title: string;
+    description: string | null;
+    materials: Array<{ name?: string; category?: string; specification?: string }>;
+    costEstimate: number | null;
+    currency: string;
+    beforeImage?: string | null;
+    beforeAlt?: string | null;
+    afterImage?: string | null;
+    afterAlt?: string | null;
+  }> = [];
   let spaces = new Map<string, string>();
   let relationalProject = false;
 
@@ -166,16 +180,45 @@ export default async function ClientPresentation({ params }: Props) {
     }
 
     const admin = createAdminClient();
-    const { data: assets } = await admin
-      .from('project_assets')
-      .select('id, space_id, storage_path, alt_text, created_at')
-      .eq('project_id', dbProject.id)
-      .eq('kind', 'progress')
-      .order('created_at', { ascending: false })
-      .limit(12);
+    const [
+      { data: progressRows },
+      { data: designOptions },
+      { data: presentationSpaces },
+      { data: presentationAssets },
+      { data: selectedVisualisations },
+    ] = await Promise.all([
+      admin
+        .from('project_assets')
+        .select('id, space_id, storage_path, alt_text, created_at')
+        .eq('project_id', dbProject.id)
+        .eq('kind', 'progress')
+        .order('created_at', { ascending: false })
+        .limit(12),
+      admin
+        .from('design_options')
+        .select('id, space_id, name, description, materials, cost_estimate, currency, is_recommended, sort_order')
+        .in('space_id', Array.from(spaces.keys()))
+        .order('sort_order'),
+      admin
+        .from('project_spaces')
+        .select('id, name, space_type, sort_order')
+        .eq('project_id', dbProject.id)
+        .order('sort_order'),
+      admin
+        .from('project_assets')
+        .select('id, space_id, kind, storage_path, alt_text, created_at')
+        .eq('project_id', dbProject.id)
+        .in('kind', ['site_photo', 'render'])
+        .order('created_at'),
+      admin
+        .from('visualisations')
+        .select('id, project_space_id, name, output_asset_id, is_selected, updated_at')
+        .eq('project_id', dbProject.id)
+        .eq('is_selected', true),
+    ]);
 
     progressAssets = await Promise.all(
-      (assets ?? []).map(async (asset) => {
+      (progressRows ?? []).map(async (asset) => {
         const { data } = await admin.storage.from('project-assets').createSignedUrl(asset.storage_path, 60 * 60);
         return {
           id: asset.id,
@@ -186,6 +229,56 @@ export default async function ClientPresentation({ params }: Props) {
         };
       }),
     );
+
+    const signedPresentationAssets = await Promise.all(
+      (presentationAssets ?? []).map(async (asset) => {
+        const { data } = await admin.storage.from('project-assets').createSignedUrl(asset.storage_path, 60 * 60);
+        return { ...asset, signed_url: data?.signedUrl ?? null };
+      }),
+    );
+
+    const presentationAssetById = new Map(signedPresentationAssets.map((asset) => [asset.id, asset]));
+    const selectedBySpace = new Map(
+      (selectedVisualisations ?? [])
+        .filter((item) => item.project_space_id && item.output_asset_id)
+        .map((item) => [item.project_space_id as string, item]),
+    );
+    const sitePhotosBySpace = new Map<string, typeof signedPresentationAssets>();
+    for (const asset of signedPresentationAssets.filter((item) => item.kind === 'site_photo' && item.space_id)) {
+      const current = sitePhotosBySpace.get(asset.space_id as string) ?? [];
+      current.push(asset);
+      sitePhotosBySpace.set(asset.space_id as string, current);
+    }
+
+    const optionsBySpace = new Map<string, typeof designOptions>();
+    for (const option of designOptions ?? []) {
+      const current = optionsBySpace.get(option.space_id) ?? [];
+      current.push(option);
+      optionsBySpace.set(option.space_id, current);
+    }
+
+    designCards = (presentationSpaces ?? []).flatMap((space) => {
+      const options = (optionsBySpace.get(space.id) ?? []).filter((option) => option.is_recommended);
+      if (!options.length) return [];
+
+      const before = sitePhotosBySpace.get(space.id)?.[0] ?? null;
+      const selected = selectedBySpace.get(space.id);
+      const after = selected?.output_asset_id ? presentationAssetById.get(selected.output_asset_id) ?? null : null;
+
+      return options.map((option) => ({
+        id: option.id,
+        spaceName: space.name,
+        title: option.name,
+        description: option.description,
+        materials: Array.isArray(option.materials) ? option.materials : [],
+        costEstimate: option.cost_estimate === null ? null : Number(option.cost_estimate),
+        currency: option.currency || 'KES',
+        beforeImage: before?.signed_url ?? null,
+        beforeAlt: before?.alt_text || `${space.name} existing condition`,
+        afterImage: after?.signed_url ?? null,
+        afterAlt: after?.alt_text || selected?.name || `${space.name} proposed design`,
+      }));
+    });
   } else if (legacyProject && userCanAccessProject(legacyProject, user.email)) {
     projectCode = legacyProject.project_code;
     clientName = legacyProject.client_name;
@@ -227,6 +320,10 @@ export default async function ClientPresentation({ params }: Props) {
             <span className="text-sm text-stone-500">{user.email}</span>
           </div>
         </header>
+
+        {relationalProject && designCards.length > 0 && (
+          <ClientDesignVision cards={designCards} showPricing={false} />
+        )}
 
         {relationalProject && (latestProgress !== null || tasks.length > 0) && (
           <section className="mb-8 grid gap-4 md:grid-cols-3">
