@@ -13,6 +13,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "remodel-app/**",
+    "src/scripts/**",
     "node_modules/**",
   ]),
 ]);
