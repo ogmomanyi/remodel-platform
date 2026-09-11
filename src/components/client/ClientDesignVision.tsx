@@ -22,10 +22,12 @@ export function ClientDesignVision({
   cards,
   totalQuote,
   preliminaries,
+  showPricing = false,
 }: {
   cards: DesignCard[];
   totalQuote?: number | null;
   preliminaries?: number | null;
+  showPricing?: boolean;
 }) {
   if (!cards.length) return null;
 
@@ -100,7 +102,7 @@ export function ClientDesignVision({
                   </div>
                 )}
 
-                {card.costEstimate !== null && (
+                {showPricing && card.costEstimate !== null && (
                   <div className="mt-7 border-t border-stone-100 pt-5">
                     <p className="text-xs uppercase tracking-wider text-stone-400">Quoted scope value</p>
                     <p className="mt-1 text-xl font-semibold text-stone-900">
@@ -114,7 +116,7 @@ export function ClientDesignVision({
         ))}
       </div>
 
-      {(totalQuote || preliminaries) && (
+      {showPricing && (totalQuote || preliminaries) && (
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {preliminaries ? (
             <div className="rounded-2xl border border-stone-200 bg-white p-5">
