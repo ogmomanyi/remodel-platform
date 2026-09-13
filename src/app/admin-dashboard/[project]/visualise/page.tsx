@@ -15,7 +15,7 @@ export default async function VisualisePage({ params }: { params: Promise<{ proj
     supabase.from('moodboards').select('id, name, project_space_id, style_direction, palette').eq('project_id', project.id).neq('status', 'archived').order('updated_at', { ascending: false }),
     supabase.from('design_concepts').select('id, name, project_space_id, design_type').eq('project_id', project.id).eq('design_type', 'scratch').order('updated_at', { ascending: false }),
     supabase.from('project_assets').select('id, space_id, kind, alt_text, storage_path').eq('project_id', project.id).order('created_at', { ascending: false }),
-    supabase.from('visualisations').select('id, name, status, project_space_id, moodboard_id, design_concept_id, source_asset_id, output_asset_id, created_at').eq('project_id', project.id).order('created_at', { ascending: false }),
+    supabase.from('visualisations').select('id, name, status, project_space_id, moodboard_id, design_concept_id, source_asset_id, output_asset_id, variant_key, is_selected, fidelity_mode, brief_version, created_at').eq('project_id', project.id).order('created_at', { ascending: false }),
   ]);
 
   const signedAssets = await Promise.all((assets ?? []).map(async (asset) => {
