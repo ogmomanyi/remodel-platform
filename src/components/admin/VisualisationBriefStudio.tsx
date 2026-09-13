@@ -203,7 +203,7 @@ export default function VisualisationBriefStudio({
               <button
                 type="button"
                 onClick={() => setFidelityMode('site_accurate')}
-                className={\`rounded-xl border px-3 py-3 text-left text-xs \${fidelityMode === 'site_accurate' ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-600'}\`}
+                className={`rounded-xl border px-3 py-3 text-left text-xs \${fidelityMode === 'site_accurate' ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-600'}`}
               >
                 <span className="block font-semibold">Site-accurate</span>
                 <span className="mt-1 block opacity-75">Preserve real architecture</span>
@@ -211,7 +211,7 @@ export default function VisualisationBriefStudio({
               <button
                 type="button"
                 onClick={() => setFidelityMode('concept')}
-                className={\`rounded-xl border px-3 py-3 text-left text-xs \${fidelityMode === 'concept' ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-600'}\`}
+                className={`rounded-xl border px-3 py-3 text-left text-xs \${fidelityMode === 'concept' ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-600'}`}
               >
                 <span className="block font-semibold">Concept</span>
                 <span className="mt-1 block opacity-75">Exploratory only</span>
@@ -342,7 +342,7 @@ export default function VisualisationBriefStudio({
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-medium text-stone-800">{job.name}</p>
-                        <span className={\`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase \${job.fidelity_mode === 'site_accurate' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}\`}>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase \${job.fidelity_mode === 'site_accurate' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
                           {job.fidelity_mode === 'site_accurate' ? 'Site-accurate' : 'Concept'}
                         </span>
                         {job.brief_version && (
