@@ -45,6 +45,47 @@ type Visualisation = {
 };
 type RenderAsset = { id: string; signed_url?: string | null; alt_text?: string | null };
 
+function captureGuidance(spaceName: string | undefined) {
+  switch (spaceName) {
+    case 'Veranda Section A':
+      return {
+        title: 'Capture Section A + connector relationship',
+        guidance: 'Stand far enough back to show the full open veranda section, the house-facing edge, the garden-facing outer edge, and the opening toward the central connector. Keep verticals straight and avoid ultra-wide distortion.',
+        caption: 'Section A existing condition — full veranda, garden edge and connector visible',
+      };
+    case 'Central Connecting Veranda':
+      return {
+        title: 'Capture the narrow connector + garden access',
+        guidance: 'Frame both adjoining veranda sections if possible, with the smaller connector centered and the garden-facing edge clearly visible. The future garden steps need to be readable from this view.',
+        caption: 'Central connector existing condition — both veranda sections and garden access visible',
+      };
+    case 'Veranda Section B':
+      return {
+        title: 'Capture Section B + right-hand fireplace corner',
+        guidance: 'Show the full enclosed veranda zone, the interface to the central connector, exterior garden-facing glazing line, and especially the right-hand wall/corner where the compact fireplace will be integrated.',
+        caption: 'Section B existing condition — connector, garden side and right fireplace corner visible',
+      };
+    case 'Boundary Wall & Planter Edge':
+      return {
+        title: 'Capture the complete garden-facing edge',
+        guidance: 'Take the photo from the garden looking back toward the veranda so the 0.5 m wall line, planter route, central-step break and relationship to both main veranda sections are visible.',
+        caption: 'Garden edge existing condition — low wall, planter route and central access visible',
+      };
+    case 'Interior Wall Modification':
+      return {
+        title: 'Capture the full wall containing the doorway',
+        guidance: 'Photograph the entire wall face straight-on if possible. Include the existing doorway, enough wall to the left to show the proposed new opening position, and adjacent finishes that must be matched after closing the old opening.',
+        caption: 'Interior wall existing condition — current doorway and left relocation zone visible',
+      };
+    default:
+      return {
+        title: 'Capture the full existing condition',
+        guidance: 'Use a level, well-lit view that shows the permanent architecture, key openings and the full area to be altered. Avoid portrait crops, extreme wide-angle distortion and obstructed views.',
+        caption: 'Existing condition — full project zone visible',
+      };
+  }
+}
+
 export default function VisualisationBriefStudio({
   projectId,
   projectSlug,
@@ -96,6 +137,8 @@ export default function VisualisationBriefStudio({
   );
 
   const selectedBoard = moodboards.find((m) => m.id === moodboardId);
+  const selectedSpace = spaces.find((space) => space.id === spaceId);
+  const photoGuidance = captureGuidance(selectedSpace?.name);
   const outputById = useMemo(() => new Map(renderAssets.map((a) => [a.id, a])), [renderAssets]);
 
   const siteAccurateBlocked = fidelityMode === 'site_accurate' && !sourceAssetId;
@@ -116,7 +159,7 @@ export default function VisualisationBriefStudio({
         projectId,
         spaceId,
         kind: 'site_photo',
-        altText: referenceCaption.trim() || 'Existing condition — ' + (spaces.find((space) => space.id === spaceId)?.name || 'project space'),
+        altText: referenceCaption.trim() || photoGuidance.caption,
         file: referenceFile,
       });
       const asset = uploaded as Asset;
@@ -325,9 +368,9 @@ export default function VisualisationBriefStudio({
 
           {spaceId && (
             <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-4">
-              <p className="text-xs font-semibold text-stone-700">Attach an existing-condition photo</p>
+              <p className="text-xs font-semibold text-stone-700">{photoGuidance.title}</p>
               <p className="mt-1 text-[11px] leading-5 text-stone-500">
-                Use a clear view that preserves the architecture and camera perspective you want the proposed render to follow.
+                {photoGuidance.guidance}
               </p>
               <input
                 id="visualisation-reference-file"
@@ -339,7 +382,7 @@ export default function VisualisationBriefStudio({
               <input
                 value={referenceCaption}
                 onChange={(event) => setReferenceCaption(event.target.value)}
-                placeholder="e.g. Section B facing garden — right corner visible"
+                placeholder={photoGuidance.caption}
                 className="mt-3 w-full rounded-xl border border-stone-200 px-3 py-2 text-xs"
               />
               <button
@@ -458,7 +501,7 @@ export default function VisualisationBriefStudio({
                           {renderingId === renderKey ? 'Rendering…' : job.status === 'failed' ? 'Retry' : 'Render'}
                         </button>
                       )}
-                      {job.status === 'ready' && !job.is_selected && (
+                      {job.status === 'ready' && !job.is_selected && job.fidelity_mode === 'site_accurate' && Boolean(job.source_asset_id) && Number(job.brief_version || 0) >= 3 && (
                         <button
                           onClick={() => select(job.id)}
                           disabled={Boolean(selectingId)}
@@ -466,6 +509,9 @@ export default function VisualisationBriefStudio({
                         >
                           {selectingId === job.id ? 'Selecting…' : 'Use for client'}
                         </button>
+                      )}
+                      {job.status === 'ready' && job.fidelity_mode !== 'site_accurate' && (
+                        <span className="rounded-full bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-700">Concept only</span>
                       )}
                     </div>
                   </div>
