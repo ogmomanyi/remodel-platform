@@ -2,6 +2,7 @@ import { createAdminClient } from '@/utils/supabase/admin';
 
 const POLLINATIONS_URL = 'https://gen.pollinations.ai';
 const ASSET_BUCKET = 'project-assets';
+const MIN_RENDER_BYTES = 100_000;
 
 export type RenderResult = {
   url: string | null;
@@ -10,35 +11,61 @@ export type RenderResult = {
   model: string;
 };
 
+function assertUsableRender(result: RenderResult) {
+  if (!result.contentType.startsWith('image/')) {
+    throw new Error('Pollinations ' + result.model + ' returned ' + result.contentType + ', not an image.');
+  }
+
+  if (result.bytes.length < MIN_RENDER_BYTES) {
+    throw new Error(
+      'Pollinations ' + result.model + ' returned a suspiciously small image (' + result.bytes.length +
+      ' bytes). This usually indicates a blocked/error placeholder rather than a usable architectural render.',
+    );
+  }
+
+  return result;
+}
+
 async function responseToImage(response: Response, model: string): Promise<RenderResult> {
   const contentType = response.headers.get('content-type') || 'image/jpeg';
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Pollinations ${model} request failed (${response.status}): ${body}`);
+    throw new Error('Pollinations ' + model + ' request failed (' + response.status + '): ' + body);
   }
-  return { url: null, bytes: Buffer.from(await response.arrayBuffer()), contentType, model };
+  return assertUsableRender({
+    url: null,
+    bytes: Buffer.from(await response.arrayBuffer()),
+    contentType,
+    model,
+  });
 }
 
 async function parseImageResponse(response: Response, model: string): Promise<RenderResult> {
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Pollinations ${model} request failed (${response.status}): ${body}`);
+    throw new Error('Pollinations ' + model + ' request failed (' + response.status + '): ' + body);
   }
-  const payload = await response.json() as { data?: Array<{ b64_json?: string; url?: string }> };
+
+  const payload = await response.json() as {
+    data?: Array<{ b64_json?: string; url?: string }>;
+  };
   const item = payload.data?.[0];
-  if (!item) throw new Error(`Pollinations ${model} returned no image.`);
+  if (!item) throw new Error('Pollinations ' + model + ' returned no image.');
+
   if (item.b64_json) {
-    return {
+    return assertUsableRender({
       url: null,
       bytes: Buffer.from(item.b64_json, 'base64'),
       contentType: 'image/png',
       model,
-    };
+    });
   }
+
   if (item.url) {
     return responseToImage(await fetch(item.url, { cache: 'no-store' }), model);
   }
-  throw new Error(`Pollinations ${model} returned an image response without data.`);
+
+  throw new Error('Pollinations ' + model + ' returned an image response without data.');
 }
 
 async function tryImageEdit(input: {
@@ -47,10 +74,10 @@ async function tryImageEdit(input: {
   prompt: string;
   sourceUrl: string;
 }) {
-  const response = await fetch(`${POLLINATIONS_URL}/v1/images/edits`, {
+  const response = await fetch(POLLINATIONS_URL + '/v1/images/edits', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${input.key}`,
+      Authorization: 'Bearer ' + input.key,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -58,7 +85,30 @@ async function tryImageEdit(input: {
       prompt: input.prompt,
       image: input.sourceUrl,
       response_format: 'b64_json',
-      safe: true,
+    }),
+    cache: 'no-store',
+  });
+
+  return parseImageResponse(response, input.model);
+}
+
+async function tryConceptGeneration(input: {
+  key: string;
+  model: string;
+  prompt: string;
+}) {
+  const response = await fetch(POLLINATIONS_URL + '/v1/images/generations', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + input.key,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: input.model,
+      prompt: input.prompt,
+      n: 1,
+      size: '1024x1024',
+      response_format: 'b64_json',
     }),
     cache: 'no-store',
   });
@@ -78,7 +128,7 @@ export async function generateVisualisation(input: {
 
   const prompt = [
     input.prompt.trim(),
-    input.negativePrompt?.trim() ? `Avoid: ${input.negativePrompt.trim()}` : '',
+    input.negativePrompt?.trim() ? 'Avoid: ' + input.negativePrompt.trim() : '',
   ].filter(Boolean).join('\n\n');
 
   const supabase = createAdminClient();
@@ -90,13 +140,18 @@ export async function generateVisualisation(input: {
       .createSignedUrl(input.sourceAssetStoragePath, 10 * 60);
 
     if (error || !data?.signedUrl) {
-      throw new Error(`Could not create a temporary source-image URL: ${error?.message || 'unknown storage error'}`);
+      throw new Error(
+        'Could not create a temporary source-image URL: ' +
+        (error?.message || 'unknown storage error'),
+      );
     }
 
-    // Verify the object really exists before handing its URL to the provider.
     const verify = await fetch(data.signedUrl, { method: 'GET', cache: 'no-store' });
     if (!verify.ok) {
-      throw new Error(`The selected source image could not be read from storage (${verify.status}). Re-upload the site photo and try again.`);
+      throw new Error(
+        'The selected source image could not be read from storage (' + verify.status +
+        '). Re-upload the site photo and try again.',
+      );
     }
 
     sourceUrl = data.signedUrl;
@@ -110,17 +165,11 @@ export async function generateVisualisation(input: {
       'nanobanana',
       'kontext',
     ]));
-
     const errors: string[] = [];
 
     for (const model of candidates) {
       try {
-        return await tryImageEdit({
-          key,
-          model,
-          prompt,
-          sourceUrl,
-        });
+        return await tryImageEdit({ key, model, prompt, sourceUrl });
       } catch (error) {
         errors.push(error instanceof Error ? error.message : String(error));
       }
@@ -132,24 +181,26 @@ export async function generateVisualisation(input: {
     );
   }
 
-  const model = process.env.POLLINATIONS_MODEL || 'flux';
-  const response = await fetch(`${POLLINATIONS_URL}/v1/images/generations`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      prompt,
-      n: 1,
-      size: '1024x1024',
-      quality: 'medium',
-      response_format: 'b64_json',
-      safe: true,
-    }),
-    cache: 'no-store',
-  });
+  const configured = process.env.POLLINATIONS_MODEL || 'gptimage';
+  const candidates = Array.from(new Set([
+    configured,
+    'gptimage',
+    'seedream5',
+    'qwen-image',
+    'flux',
+  ]));
+  const errors: string[] = [];
 
-  return parseImageResponse(response, model);
+  for (const model of candidates) {
+    try {
+      return await tryConceptGeneration({ key, model, prompt });
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  throw new Error(
+    'Concept rendering failed across all configured image models. ' +
+    errors.join(' | '),
+  );
 }
