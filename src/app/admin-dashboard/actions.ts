@@ -79,4 +79,86 @@ export async function deleteSpace(input: { projectId: string; spaceId: string })
 export async function createDesignOption(input: { spaceId: string; name: string; description: string; costEstimate: number | null; isRecommended: boolean; materials?: MaterialReference[] }) { await requireAdmin(); const name = input.name.trim(); if (!name) throw new Error('Option name is required.'); if (input.costEstimate !== null && (!Number.isFinite(input.costEstimate) || input.costEstimate < 0)) throw new Error('Cost must be a valid positive number.'); const materials = normaliseMaterials(input.materials); if (materials.some((m) => m.quantity !== null && (!Number.isFinite(m.quantity) || m.quantity < 0) || m.estimated_material_cost !== null && (!Number.isFinite(m.estimated_material_cost) || m.estimated_material_cost < 0))) throw new Error('Material quantities and costs must be valid non-negative numbers.'); const supabase = createAdminClient(); const { data: existing } = await supabase.from('design_options').select('sort_order').eq('space_id', input.spaceId).order('sort_order', { ascending: false }).limit(1).maybeSingle(); if (input.isRecommended) await supabase.from('design_options').update({ is_recommended: false }).eq('space_id', input.spaceId); const { data, error } = await supabase.from('design_options').insert({ space_id: input.spaceId, name, description: input.description.trim() || null, materials, cost_estimate: input.costEstimate, is_recommended: input.isRecommended, sort_order: (existing?.sort_order ?? -1) + 1 }).select('id, name, description, materials, cost_estimate, currency, status, is_recommended').single(); if (error || !data) throw new Error(`Could not create design option: ${error?.message || 'unknown database error'}`); revalidatePath('/admin-dashboard'); return data; }
 export async function deleteDesignOption(input: { spaceId: string; optionId: string }) { await requireAdmin(); const supabase = createAdminClient(); const { error } = await supabase.from('design_options').delete().eq('id', input.optionId).eq('space_id', input.spaceId); if (error) throw new Error(`Could not delete design option: ${error.message}`); revalidatePath('/admin-dashboard'); }
 export async function uploadProjectAsset(input: { projectId: string; spaceId?: string | null; kind: string; altText?: string; file: File }) { await requireAdmin(); if (!input.file || !(input.file instanceof File)) throw new Error('Please choose a file.'); if (input.file.size <= 0 || input.file.size > MAX_ASSET_BYTES) throw new Error('File must be between 1 byte and 10 MB.'); if (!ALLOWED_ASSET_TYPES.has(input.file.type)) throw new Error('Only JPEG, PNG, WebP images and PDF files are supported.'); const allowedKinds = new Set(['site_photo', 'plan', 'render', 'moodboard', 'material', 'progress', 'document']); if (!allowedKinds.has(input.kind)) throw new Error('Invalid asset type.'); const supabase = createAdminClient(); const { data: project } = await supabase.from('projects').select('id, slug').eq('id', input.projectId).maybeSingle(); if (!project) throw new Error('Project not found.'); if (input.spaceId) { const { data: space } = await supabase.from('project_spaces').select('id').eq('id', input.spaceId).eq('project_id', project.id).maybeSingle(); if (!space) throw new Error('Selected space does not belong to this project.'); } const extension = input.file.name.includes('.') ? input.file.name.split('.').pop()!.toLowerCase() : 'bin'; const path = `${project.id}/${input.spaceId || 'project'}/${crypto.randomUUID()}.${extension}`; const { error: uploadError } = await supabase.storage.from(ASSET_BUCKET).upload(path, input.file, { contentType: input.file.type, upsert: false }); if (uploadError) throw new Error(`Could not upload asset: ${uploadError.message}`); const { data: asset, error: assetError } = await supabase.from('project_assets').insert({ project_id: project.id, space_id: input.spaceId || null, kind: input.kind, storage_path: path, alt_text: input.altText?.trim() || null, metadata: { original_name: input.file.name, content_type: input.file.type, size: input.file.size } }).select('id, space_id, kind, storage_path, alt_text, created_at').single(); if (assetError || !asset) { await supabase.storage.from(ASSET_BUCKET).remove([path]); throw new Error(`Could not save asset record: ${assetError?.message || 'unknown database error'}`); } const { data: signed } = await supabase.storage.from(ASSET_BUCKET).createSignedUrl(path, 60 * 60); await supabase.from('project_events').insert({ project_id: project.id, event_type: 'project_asset_uploaded', actor_email: 'admin', metadata: { asset_id: asset.id, kind: input.kind, space_id: input.spaceId || null } }); revalidatePath(`/admin-dashboard/${project.slug}/edit`); revalidatePath(`/admin-dashboard/${project.slug}/execution`); revalidatePath(`/${project.slug}`); revalidatePath('/client-dashboard'); revalidatePath('/admin-dashboard'); return { ...asset, signed_url: signed?.signedUrl ?? null }; }
-export async function deleteProjectAsset(input: { projectId: string; assetId: string }) { await requireAdmin(); const supabase = createAdminClient(); const [{ data: asset, error: loadError }, { data: project }] = await Promise.all([supabase.from('project_assets').select('id, storage_path').eq('id', input.assetId).eq('project_id', input.projectId).maybeSingle(), supabase.from('projects').select('slug').eq('id', input.projectId).maybeSingle()]); if (loadError || !asset) throw new Error(`Could not find asset: ${loadError?.message || 'asset not found'}`); const { error: removeError } = await supabase.storage.from(ASSET_BUCKET).remove([asset.storage_path]); if (removeError) throw new Error(`Could not remove stored file: ${removeError.message}`); const { error } = await supabase.from('project_assets').delete().eq('id', asset.id).eq('project_id', input.projectId); if (error) throw new Error(`Could not delete asset record: ${error.message}`); if (project?.slug) { revalidatePath(`/admin-dashboard/${project.slug}/edit`); revalidatePath(`/admin-dashboard/${project.slug}/execution`); revalidatePath(`/${project.slug}`); } revalidatePath('/client-dashboard'); revalidatePath('/admin-dashboard'); }
+export async function deleteProjectAsset(input: { projectId: string; assetId: string }) {
+  await requireAdmin();
+  const supabase = createAdminClient();
+
+  const [{ data: asset, error: loadError }, { data: project }] = await Promise.all([
+    supabase.from('project_assets').select('id, kind, storage_path').eq('id', input.assetId).eq('project_id', input.projectId).maybeSingle(),
+    supabase.from('projects').select('slug').eq('id', input.projectId).maybeSingle(),
+  ]);
+
+  if (loadError || !asset) throw new Error(`Could not find asset: ${loadError?.message || 'asset not found'}`);
+
+  const { data: outputJobs, error: outputLoadError } = await supabase
+    .from('visualisations')
+    .select('id')
+    .eq('output_asset_id', asset.id);
+
+  if (outputLoadError) throw new Error(`Could not inspect visualisation references: ${outputLoadError.message}`);
+
+  if (outputJobs?.length) {
+    const { error: resetError } = await supabase
+      .from('visualisations')
+      .update({
+        output_asset_id: null,
+        is_selected: false,
+        status: 'brief',
+        updated_at: new Date().toISOString(),
+      })
+      .in('id', outputJobs.map((job) => job.id));
+
+    if (resetError) throw new Error(`Could not clear visualisation outputs: ${resetError.message}`);
+  }
+
+  const { data: sourceJobs, error: sourceLoadError } = await supabase
+    .from('visualisations')
+    .select('id')
+    .eq('source_asset_id', asset.id);
+
+  if (sourceLoadError) throw new Error(`Could not inspect source-image references: ${sourceLoadError.message}`);
+
+  if (sourceJobs?.length) {
+    const { error: sourceResetError } = await supabase
+      .from('visualisations')
+      .update({
+        source_asset_id: null,
+        requires_source_asset: false,
+        fidelity_mode: 'concept',
+        is_selected: false,
+        updated_at: new Date().toISOString(),
+      })
+      .in('id', sourceJobs.map((job) => job.id));
+
+    if (sourceResetError) throw new Error(`Could not clear source-image references: ${sourceResetError.message}`);
+  }
+
+  const { error: deleteError } = await supabase
+    .from('project_assets')
+    .delete()
+    .eq('id', asset.id)
+    .eq('project_id', input.projectId);
+
+  if (deleteError) throw new Error(`Could not delete asset record: ${deleteError.message}`);
+
+  const { error: removeError } = await supabase.storage.from(ASSET_BUCKET).remove([asset.storage_path]);
+  if (removeError && !/not found/i.test(removeError.message)) {
+    throw new Error(`Asset record was removed, but the stored file could not be deleted: ${removeError.message}`);
+  }
+
+  await supabase.from('project_events').insert({
+    project_id: input.projectId,
+    event_type: 'project_asset_deleted',
+    actor_email: 'admin',
+    metadata: { asset_id: asset.id, kind: asset.kind },
+  });
+
+  if (project?.slug) {
+    revalidatePath(`/admin-dashboard/${project.slug}/edit`);
+    revalidatePath(`/admin-dashboard/${project.slug}/visualise`);
+    revalidatePath(`/admin-dashboard/${project.slug}/execution`);
+    revalidatePath(`/${project.slug}`);
+  }
+  revalidatePath('/client-dashboard');
+  revalidatePath('/admin-dashboard');
+}
