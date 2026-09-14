@@ -482,12 +482,24 @@ export async function selectVisualisationVariant(input: { visualisationId: strin
 
   const { data: job, error } = await supabase
     .from('visualisations')
-    .select('id, project_id, project_space_id, output_asset_id, variant_key, metadata')
+    .select('id, project_id, project_space_id, output_asset_id, variant_key, metadata, status, fidelity_mode, source_asset_id, brief_version')
     .eq('id', input.visualisationId)
     .maybeSingle();
 
   if (error || !job || !job.output_asset_id) {
     throw new Error('A completed visualisation render is required before selecting it.');
+  }
+  if (job.status !== 'ready') {
+    throw new Error('Only a completed render can be used for the client presentation.');
+  }
+  if (job.fidelity_mode !== 'site_accurate') {
+    throw new Error('Concept renders are exploratory only. Create a site-accurate render from an existing-condition photo before using it for the client.');
+  }
+  if (!job.source_asset_id) {
+    throw new Error('A client render must be grounded in an existing-condition site photo.');
+  }
+  if (Number(job.brief_version || 0) < 3) {
+    throw new Error('This render uses an older brief. Recreate it with the current structured brief before presenting it to the client.');
   }
 
   await supabase
