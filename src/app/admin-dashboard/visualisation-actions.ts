@@ -403,7 +403,7 @@ export async function renderVisualisation(input: { visualisationId: string; vari
           brief_version: job.brief_version,
         },
       })
-      .select('id')
+      .select('id, alt_text, storage_path')
       .single();
 
     if (assetError || !asset) {
@@ -458,7 +458,18 @@ export async function renderVisualisation(input: { visualisationId: string; vari
     const projectSlug = textValue(asRecord(job.metadata).project_slug) || '';
     if (projectSlug) revalidatePath('/admin-dashboard/' + projectSlug + '/visualise');
 
-    return { id: job.id, assetId: asset.id, status: 'ready' as const, variantKey };
+    const { data: signed } = await supabase.storage
+      .from('project-assets')
+      .createSignedUrl(asset.storage_path, 60 * 60);
+
+    return {
+      id: job.id,
+      assetId: asset.id,
+      status: 'ready' as const,
+      variantKey,
+      signedUrl: signed?.signedUrl ?? null,
+      altText: asset.alt_text || job.name + ' — ' + variantKey,
+    };
   } catch (renderError) {
     await supabase
       .from('visualisations')
