@@ -117,6 +117,7 @@ export default function VisualisationBriefStudio({
   const [message, setMessage] = useState('');
   const [jobs, setJobs] = useState<Visualisation[]>(visualisations);
   const [availableAssets, setAvailableAssets] = useState<Asset[]>(assets);
+  const [previewAssets, setPreviewAssets] = useState<RenderAsset[]>(renderAssets);
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [referenceCaption, setReferenceCaption] = useState('');
   const [uploadingReference, setUploadingReference] = useState(false);
@@ -139,7 +140,7 @@ export default function VisualisationBriefStudio({
   const selectedBoard = moodboards.find((m) => m.id === moodboardId);
   const selectedSpace = spaces.find((space) => space.id === spaceId);
   const photoGuidance = captureGuidance(selectedSpace?.name);
-  const outputById = useMemo(() => new Map(renderAssets.map((a) => [a.id, a])), [renderAssets]);
+  const outputById = useMemo(() => new Map(previewAssets.map((a) => [a.id, a])), [previewAssets]);
 
   const siteAccurateBlocked = fidelityMode === 'site_accurate' && !sourceAssetId;
   const referenceCoverage = useMemo(
@@ -216,7 +217,15 @@ export default function VisualisationBriefStudio({
             : job,
         ),
       );
-      setMessage('Render completed. Refresh the page to load the new image preview.');
+      setPreviewAssets((current) => [
+        {
+          id: result.assetId,
+          signed_url: result.signedUrl,
+          alt_text: result.altText,
+        },
+        ...current.filter((asset) => asset.id !== result.assetId),
+      ]);
+      setMessage('Render completed using ' + result.model + '. The preview is shown below.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not render visualisation');
     } finally {
