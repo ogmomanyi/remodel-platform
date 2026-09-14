@@ -382,9 +382,7 @@ export async function renderVisualisation(input: { visualisationId: string; vari
 
     if (uploadError) throw new Error('Could not save generated visualisation: ' + uploadError.message);
 
-    const model = sourcePath
-      ? (process.env.POLLINATIONS_EDIT_MODEL || 'klein')
-      : (process.env.POLLINATIONS_MODEL || 'flux');
+    const model = result.model;
 
     const { data: asset, error: assetError } = await supabase
       .from('project_assets')
@@ -452,6 +450,7 @@ export async function renderVisualisation(input: { visualisationId: string; vari
         provider: 'pollinations',
         variant_key: variantKey,
         fidelity_mode: job.fidelity_mode,
+        model,
       },
     });
 
@@ -469,6 +468,7 @@ export async function renderVisualisation(input: { visualisationId: string; vari
       variantKey,
       signedUrl: signed?.signedUrl ?? null,
       altText: asset.alt_text || job.name + ' — ' + variantKey,
+      model,
     };
   } catch (renderError) {
     await supabase
