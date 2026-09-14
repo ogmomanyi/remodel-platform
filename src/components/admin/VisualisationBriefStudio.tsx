@@ -6,6 +6,7 @@ import {
   renderVisualisation,
   selectVisualisationVariant,
 } from '@/app/admin-dashboard/visualisation-actions';
+import { uploadProjectAsset } from '@/app/admin-dashboard/actions';
 
 type Space = { id: string; name: string; space_type?: string | null };
 type Moodboard = {
@@ -45,6 +46,7 @@ type Visualisation = {
 type RenderAsset = { id: string; signed_url?: string | null; alt_text?: string | null };
 
 export default function VisualisationBriefStudio({
+  projectId,
   projectSlug,
   spaces,
   moodboards,
@@ -53,6 +55,7 @@ export default function VisualisationBriefStudio({
   visualisations,
   renderAssets = [],
 }: {
+  projectId: string;
   projectSlug: string;
   spaces: Space[];
   moodboards: Moodboard[];
@@ -72,6 +75,10 @@ export default function VisualisationBriefStudio({
   const [selectingId, setSelectingId] = useState('');
   const [message, setMessage] = useState('');
   const [jobs, setJobs] = useState<Visualisation[]>(visualisations);
+  const [availableAssets, setAvailableAssets] = useState<Asset[]>(assets);
+  const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  const [referenceCaption, setReferenceCaption] = useState('');
+  const [uploadingReference, setUploadingReference] = useState(false);
 
   const filteredMoodboards = useMemo(
     () => moodboards.filter((m) => !spaceId || !m.project_space_id || m.project_space_id === spaceId),
@@ -84,14 +91,48 @@ export default function VisualisationBriefStudio({
   );
 
   const sourceAssets = useMemo(
-    () => assets.filter((a) => a.kind === 'site_photo' && (!spaceId || !a.space_id || a.space_id === spaceId)),
-    [assets, spaceId],
+    () => availableAssets.filter((a) => a.kind === 'site_photo' && (!spaceId || !a.space_id || a.space_id === spaceId)),
+    [availableAssets, spaceId],
   );
 
   const selectedBoard = moodboards.find((m) => m.id === moodboardId);
   const outputById = useMemo(() => new Map(renderAssets.map((a) => [a.id, a])), [renderAssets]);
 
   const siteAccurateBlocked = fidelityMode === 'site_accurate' && !sourceAssetId;
+  const referenceCoverage = useMemo(
+    () => spaces.map((space) => ({
+      ...space,
+      count: availableAssets.filter((asset) => asset.kind === 'site_photo' && asset.space_id === space.id).length,
+    })),
+    [spaces, availableAssets],
+  );
+
+  async function uploadReference() {
+    if (!referenceFile || !spaceId) return;
+    setUploadingReference(true);
+    setMessage('Uploading existing-condition reference…');
+    try {
+      const uploaded = await uploadProjectAsset({
+        projectId,
+        spaceId,
+        kind: 'site_photo',
+        altText: referenceCaption.trim() || 'Existing condition — ' + (spaces.find((space) => space.id === spaceId)?.name || 'project space'),
+        file: referenceFile,
+      });
+      const asset = uploaded as Asset;
+      setAvailableAssets((current) => [asset, ...current]);
+      setSourceAssetId(asset.id);
+      setReferenceFile(null);
+      setReferenceCaption('');
+      setMessage('Site reference uploaded and selected. Site-accurate rendering is now unlocked for this space.');
+      const input = document.getElementById('visualisation-reference-file') as HTMLInputElement | null;
+      if (input) input.value = '';
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not upload site reference.');
+    } finally {
+      setUploadingReference(false);
+    }
+  }
 
   async function createBrief() {
     setBusy(true);
@@ -169,6 +210,25 @@ export default function VisualisationBriefStudio({
         </p>
 
         <div className="mt-6 space-y-4">
+          <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">Reference readiness</p>
+              <span className="text-[11px] text-stone-400">
+                {referenceCoverage.filter((item) => item.count > 0).length}/{referenceCoverage.length} zones ready
+              </span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {referenceCoverage.map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="truncate text-stone-700">{item.name}</span>
+                  <span className={item.count > 0 ? 'rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700'}>
+                    {item.count > 0 ? item.count + ' reference' + (item.count === 1 ? '' : 's') : 'Needs photo'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <label className="block text-xs font-medium text-stone-500">
             Visualisation name
             <input
@@ -203,7 +263,7 @@ export default function VisualisationBriefStudio({
               <button
                 type="button"
                 onClick={() => setFidelityMode('site_accurate')}
-                className={`rounded-xl border px-3 py-3 text-left text-xs \${fidelityMode === 'site_accurate' ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-600'}`}
+                className={`rounded-xl border px-3 py-3 text-left text-xs ${fidelityMode === 'site_accurate' ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-600'}`}
               >
                 <span className="block font-semibold">Site-accurate</span>
                 <span className="mt-1 block opacity-75">Preserve real architecture</span>
@@ -211,7 +271,7 @@ export default function VisualisationBriefStudio({
               <button
                 type="button"
                 onClick={() => setFidelityMode('concept')}
-                className={`rounded-xl border px-3 py-3 text-left text-xs \${fidelityMode === 'concept' ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-600'}`}
+                className={`rounded-xl border px-3 py-3 text-left text-xs ${fidelityMode === 'concept' ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-600'}`}
               >
                 <span className="block font-semibold">Concept</span>
                 <span className="mt-1 block opacity-75">Exploratory only</span>
@@ -263,9 +323,39 @@ export default function VisualisationBriefStudio({
             </select>
           </label>
 
+          {spaceId && (
+            <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-4">
+              <p className="text-xs font-semibold text-stone-700">Attach an existing-condition photo</p>
+              <p className="mt-1 text-[11px] leading-5 text-stone-500">
+                Use a clear view that preserves the architecture and camera perspective you want the proposed render to follow.
+              </p>
+              <input
+                id="visualisation-reference-file"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(event) => setReferenceFile(event.target.files?.[0] ?? null)}
+                className="mt-3 block w-full text-xs text-stone-600"
+              />
+              <input
+                value={referenceCaption}
+                onChange={(event) => setReferenceCaption(event.target.value)}
+                placeholder="e.g. Section B facing garden — right corner visible"
+                className="mt-3 w-full rounded-xl border border-stone-200 px-3 py-2 text-xs"
+              />
+              <button
+                type="button"
+                onClick={uploadReference}
+                disabled={!referenceFile || uploadingReference}
+                className="mt-3 w-full rounded-xl border border-stone-300 bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-700 disabled:opacity-40"
+              >
+                {uploadingReference ? 'Uploading…' : 'Upload & use this reference'}
+              </button>
+            </div>
+          )}
+
           {fidelityMode === 'site_accurate' && sourceAssets.length === 0 && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">
-              No site photo is attached to this space. Upload an existing-condition photo in Project Visuals before creating a site-accurate brief.
+              No site photo is attached to this space yet. Upload one here to unlock site-accurate rendering.
             </div>
           )}
 
@@ -342,7 +432,7 @@ export default function VisualisationBriefStudio({
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-medium text-stone-800">{job.name}</p>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase \${job.fidelity_mode === 'site_accurate' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${job.fidelity_mode === 'site_accurate' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
                           {job.fidelity_mode === 'site_accurate' ? 'Site-accurate' : 'Concept'}
                         </span>
                         {job.brief_version && (
