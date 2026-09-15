@@ -70,7 +70,15 @@ function sleep(ms: number) {
   return ms ? new Promise((resolve) => window.setTimeout(resolve, ms)) : Promise.resolve();
 }
 
-export async function uploadProjectAsset(input: UploadInput) {
+export async function uploadProjectAsset(input: UploadInput): Promise<{
+  id: string;
+  space_id: string | null;
+  kind: string;
+  storage_path: string;
+  alt_text: string | null;
+  created_at: string;
+  signed_url: string | null;
+}> {
   validateFile(input.file, input.kind);
 
   const prepared = await prepareProjectAssetUpload({
@@ -108,7 +116,7 @@ export async function uploadProjectAsset(input: UploadInput) {
   for (const delay of [0, 700, 1800]) {
     await sleep(delay);
     try {
-      return await finalizeProjectAssetUpload({
+      const result = await finalizeProjectAssetUpload({
         projectId: input.projectId,
         spaceId: input.spaceId || null,
         kind: input.kind,
@@ -118,6 +126,16 @@ export async function uploadProjectAsset(input: UploadInput) {
         size: input.file.size,
         path: prepared.path,
       });
+
+      return {
+        id: String(result.id),
+        space_id: result.space_id ? String(result.space_id) : null,
+        kind: String(result.kind),
+        storage_path: String(result.storage_path),
+        alt_text: result.alt_text ? String(result.alt_text) : null,
+        created_at: String(result.created_at),
+        signed_url: result.signed_url ? String(result.signed_url) : null,
+      };
     } catch (error) {
       finalError = error;
     }
