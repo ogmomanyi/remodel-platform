@@ -5,6 +5,7 @@ import { ApproveButton } from '@/components/ApproveButton';
 import { ClientDesignVision } from '@/components/client/ClientDesignVision';
 import { ClientSiteContext } from '@/components/client/ClientSiteContext';
 import { ProjectScaleOverview } from '@/components/client/ProjectScaleOverview';
+import { ClientVisualCatalogue, type ClientCatalogueBoard } from '@/components/client/ClientVisualCatalogue';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { getProjectBySlug, userCanAccessProject } from '@/lib/projects';
@@ -99,6 +100,7 @@ export default async function ClientPresentation({ params }: Props) {
   let tasks: ClientTask[] = [];
   let updates: ProgressUpdate[] = [];
   let progressAssets: ProgressAsset[] = [];
+  let catalogueBoards: ClientCatalogueBoard[] = [];
   let projectScaleMetrics: Array<{ label: string; value: string; note?: string; kind: 'quoted' | 'derived' }> = [];
   let designCards: Array<{
     id: string;
@@ -198,6 +200,61 @@ export default async function ClientPresentation({ params }: Props) {
     ];
 
     const admin = createAdminClient();
+
+    const { data: publishedBoards } = await supabase
+      .from('presentation_boards')
+      .select('id, board_code, title, subtitle, board_type, narrative, key_features, sort_order')
+      .eq('project_id', dbProject.id)
+      .eq('status', 'published')
+      .eq('client_visible', true)
+      .order('sort_order');
+
+    if (publishedBoards?.length) {
+      const boardIds = publishedBoards.map((board) => board.id);
+      const { data: boardLinks } = await supabase
+        .from('presentation_board_assets')
+        .select('id, board_id, asset_id, role, caption, sort_order')
+        .in('board_id', boardIds)
+        .order('sort_order');
+
+      const assetIds = Array.from(new Set((boardLinks ?? []).map((row) => row.asset_id)));
+      const { data: boardAssetRows } = assetIds.length
+        ? await admin
+            .from('project_assets')
+            .select('id, storage_path, alt_text')
+            .in('id', assetIds)
+        : { data: [] };
+
+      const signedBoardAssets = await Promise.all(
+        (boardAssetRows ?? []).map(async (asset) => {
+          const { data } = await admin.storage.from('project-assets').createSignedUrl(asset.storage_path, 60 * 60);
+          return { ...asset, signed_url: data?.signedUrl ?? null };
+        }),
+      );
+      const boardAssetMap = new Map(signedBoardAssets.map((asset) => [asset.id, asset]));
+
+      catalogueBoards = publishedBoards.map((board) => ({
+        id: board.id,
+        code: board.board_code,
+        title: board.title,
+        subtitle: board.subtitle,
+        type: board.board_type,
+        narrative: board.narrative,
+        features: Array.isArray(board.key_features) ? board.key_features.filter((item): item is string => typeof item === 'string') : [],
+        assets: (boardLinks ?? [])
+          .filter((row) => row.board_id === board.id)
+          .map((row) => {
+            const asset = boardAssetMap.get(row.asset_id);
+            return {
+              id: row.id,
+              role: row.role,
+              caption: row.caption,
+              url: asset?.signed_url ?? null,
+              alt: asset?.alt_text || board.title,
+            };
+          }),
+      }));
+    }
     const [
       { data: progressRows },
       { data: designOptions },
@@ -340,6 +397,10 @@ export default async function ClientPresentation({ params }: Props) {
         </header>
 
         {relationalProject && <ClientSiteContext projectCode={projectCode} />}
+
+        {relationalProject && catalogueBoards.length > 0 && (
+          <ClientVisualCatalogue boards={catalogueBoards} />
+        )}
 
         {relationalProject && projectScaleMetrics.length > 0 && (
           <ProjectScaleOverview metrics={projectScaleMetrics} />
