@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { deleteProjectAsset, uploadProjectAsset } from '@/app/admin-dashboard/actions';
+import { deleteProjectAsset } from '@/app/admin-dashboard/actions';
+import { uploadProjectAsset } from '@/lib/project-asset-upload';
 
 type Space = { id: string; name: string };
 type Asset = {
