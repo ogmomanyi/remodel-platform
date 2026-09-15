@@ -6,7 +6,7 @@ import {
   renderVisualisation,
   selectVisualisationVariant,
 } from '@/app/admin-dashboard/visualisation-actions';
-import { uploadProjectAsset } from '@/lib/project-asset-upload';
+import { uploadProjectAsset } from '@/app/admin-dashboard/actions';
 
 type Space = { id: string; name: string; space_type?: string | null };
 type Moodboard = {
