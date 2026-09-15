@@ -15,9 +15,13 @@ type Board = {
   title: string;
   subtitle: string | null;
   board_type: string;
+  page_number: number | null;
+  template_key: string | null;
+  eyebrow: string | null;
   narrative: string | null;
   key_features: string[];
   layout_spec: Record<string, unknown>;
+  data_bindings: Record<string, unknown>;
   status: string;
   client_visible: boolean;
   sort_order: number;
@@ -78,7 +82,7 @@ export default async function VisualCataloguePage({
   ] = await Promise.all([
     supabase
       .from('presentation_boards')
-      .select('id, board_code, title, subtitle, board_type, narrative, key_features, layout_spec, status, client_visible, sort_order, project_space_id')
+      .select('id, board_code, title, subtitle, board_type, page_number, template_key, eyebrow, narrative, key_features, layout_spec, data_bindings, status, client_visible, sort_order, project_space_id')
       .eq('project_id', project.id)
       .order('sort_order'),
     supabase
@@ -121,6 +125,7 @@ export default async function VisualCataloguePage({
     ...board,
     key_features: Array.isArray(board.key_features) ? board.key_features.filter((item): item is string => typeof item === 'string') : [],
     layout_spec: board.layout_spec && typeof board.layout_spec === 'object' ? board.layout_spec as Record<string, unknown> : {},
+    data_bindings: board.data_bindings && typeof board.data_bindings === 'object' ? board.data_bindings as Record<string, unknown> : {},
   }));
 
   const signedAssets: Asset[] = await Promise.all(
@@ -172,7 +177,7 @@ export default async function VisualCataloguePage({
             </p>
             <h1 className="mt-1 text-3xl font-semibold tracking-tight text-stone-900">Visual Catalogue</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
-              Seven client presentation boards, sequenced from overall vision to materials and scale. Boards stay internal until all required image slots are filled with client-safe assets.
+              Twelve catalogue pages, sequenced from cover and approved concept through zones, work packages, internal works and commercial summary. Pages stay internal until required content is complete and approved.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -203,8 +208,11 @@ export default async function VisualCataloguePage({
               <article key={board.id} className="overflow-hidden rounded-3xl border border-stone-200 bg-white">
                 <div className="grid lg:grid-cols-[260px_1fr]">
                   <div className="border-b border-stone-100 bg-stone-900 p-6 text-white lg:border-b-0 lg:border-r">
-                    <p className="font-mono text-xs text-stone-400">{board.board_code}</p>
-                    <p className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">{titleCase(board.board_type)}</p>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-mono text-xs text-stone-400">{board.board_code}</p>
+                      {board.page_number && <span className="text-xs font-semibold text-stone-500">Page {String(board.page_number).padStart(2, '0')}</span>}
+                    </div>
+                    <p className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">{board.eyebrow || titleCase(board.board_type)}</p>
                     <h2 className="mt-2 text-xl font-semibold">{board.title}</h2>
                     {board.subtitle && <p className="mt-2 text-sm leading-6 text-stone-300">{board.subtitle}</p>}
 
@@ -319,7 +327,19 @@ export default async function VisualCataloguePage({
                       </div>
 
                       <aside>
-                        <h3 className="text-sm font-semibold text-stone-900">Board content</h3>
+                        <h3 className="text-sm font-semibold text-stone-900">Page content</h3>
+                        {board.template_key && (
+                          <div className="mt-3 rounded-xl border border-stone-200 bg-white px-3 py-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Template</p>
+                            <p className="mt-1 text-xs font-medium text-stone-700">{board.template_key}</p>
+                          </div>
+                        )}
+                        {Object.keys(board.data_bindings).length > 0 && (
+                          <div className="mt-3 rounded-xl border border-stone-200 bg-white px-3 py-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Live data bindings</p>
+                            <p className="mt-1 break-words font-mono text-[10px] leading-4 text-stone-500">{JSON.stringify(board.data_bindings)}</p>
+                          </div>
+                        )}
                         <ul className="mt-3 space-y-2">
                           {board.key_features.map((feature) => (
                             <li key={feature} className="flex gap-2 text-xs leading-5 text-stone-600">
