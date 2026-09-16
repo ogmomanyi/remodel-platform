@@ -182,6 +182,7 @@ export default async function VisualCataloguePage({
           </div>
           <div className="flex flex-wrap gap-2">
             <Link href={`/admin-dashboard/${slug}/visualise`} className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-medium">Visualisation Studio</Link>
+            <Link href={`/admin-dashboard/${slug}/boards/print`} target="_blank" className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-medium">Preview / Save PDF ↗</Link>
             <Link href={`/${slug}`} target="_blank" className="rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white">Client view ↗</Link>
           </div>
         </div>
