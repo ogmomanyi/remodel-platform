@@ -232,14 +232,14 @@ function WorkPackagePage({ board, catalogue }: { board: Board; catalogue: Catalo
               <ul className={styles.featureList}>{removals.map((item) => <li key={item}>{item}</li>)}</ul>
             </div>
           )}
-          {board.content_json.finish_direction && (
+          {Boolean(board.content_json.finish_direction) && (
             <div className={styles.card} style={{ marginTop: '5mm' }}>
               <div className={styles.cardTitle}>Finish direction</div>
               <p className={styles.body}>{String(board.content_json.finish_direction)}</p>
             </div>
           )}
           <div style={{ marginTop: '8mm', textAlign: 'right' }}>
-            {board.content_json.headline_quantity && <div className={styles.body}>{String(board.content_json.headline_quantity)}</div>}
+            {Boolean(board.content_json.headline_quantity) && <div className={styles.body}>{String(board.content_json.headline_quantity)}</div>}
             <div className={styles.eyebrow}>Section total</div>
             <div className={styles.amount}>{money(board.content_json.section_total, catalogue.currency)}</div>
           </div>
